@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 760" role="img" aria-labelledby="title desc">
+<title id="title">The Frostmarch</title><desc id="desc">A fantasy realm map centered on Keld, with five fixed hunting routes to the Graycap Range, Giant’s Pass, Birchway, Mammoth Grounds, and Direwolf Wood.</desc>
+<defs>
+  <pattern id="paper" width="18" height="18" patternUnits="userSpaceOnUse"><rect width="18" height="18" fill="#eee8d8"/><circle cx="4" cy="7" r=".6" fill="#d4cbb6" opacity=".42"/><circle cx="14" cy="14" r=".5" fill="#d4cbb6" opacity=".35"/></pattern>
+  <pattern id="woods" width="44" height="38" patternUnits="userSpaceOnUse"><path d="M10 31 18 14l8 17zM7 32h22M32 33l5-12 5 12z" fill="#71836a" opacity=".72"/><path d="M18 31v4M37 32v3" stroke="#596b52" stroke-width="2"/></pattern>
+  <pattern id="tundra" width="50" height="42" patternUnits="userSpaceOnUse"><path d="M5 29q8-7 16 0m9 8q7-6 14 0" fill="none" stroke="#9aab9e" stroke-width="1.5" opacity=".75"/></pattern>
+  <pattern id="mountainFill" width="74" height="58" patternUnits="userSpaceOnUse"><path d="m8 51 19-37 18 37z" fill="#9d9a89" stroke="#716f64" stroke-width="1.5"/><path d="m20 29 7-15 8 16-8-4z" fill="#f4f0e6"/><path d="m43 52 13-27 14 27z" fill="#aaa796" stroke="#716f64" stroke-width="1.4"/><path d="m51 36 5-11 6 12-6-3z" fill="#f4f0e6"/></pattern>
+  <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0 0 9 4.5 0 9z" fill="#9a493e"/></marker>
+  <style>
+    text{fill:#29291f;font-family:Georgia,'Times New Roman',serif}.small{font-size:13px;letter-spacing:.04em}.place{font-size:18px;font-variant:small-caps;letter-spacing:.06em}.region{font-size:21px;font-style:italic;fill:#555846}.route{fill:none;stroke:#9a493e;stroke-width:3;stroke-dasharray:8 7;marker-end:url(#arrow)}.water{fill:none;stroke:#78919a;stroke-width:8;stroke-linecap:round;opacity:.8}.waterline{fill:none;stroke:#d5e0dc;stroke-width:2}.terrain-line{fill:none;stroke:#8c8a77;stroke-width:1.2;opacity:.42}.marker{fill:#f7f2e6;stroke:#9a493e;stroke-width:2.5}.faction{font:12px ui-monospace,monospace;fill:#713c34;letter-spacing:.06em}
+  </style>
+</defs>
+<rect width="1100" height="760" fill="url(#paper)"/>
+<rect x="22" y="22" width="1056" height="716" rx="3" fill="none" stroke="#776f5d" stroke-width="2"/>
+<rect x="31" y="31" width="1038" height="698" rx="2" fill="none" stroke="#b3a78d" stroke-width="1"/>
+<text x="58" y="78" font-size="34" letter-spacing=".12em">THE FROSTMARCH</text>
+<text x="60" y="103" class="small" fill="#6b6758">REALM OF KELD · HUNTING ROUTES &amp; CONTESTED LANDS</text>
+
+<!-- region washes -->
+<path d="M130 133q225-61 436-13 159 36 330 3l94 130q-85 87-238 82-180-6-310 18-193 35-321-62z" fill="#d9d7c9" opacity=".55"/>
+<path d="M118 375q101-73 253-10 95 40 109 164 14 120-65 159H135q-47-97-17-313z" fill="url(#tundra)" opacity=".72"/>
+<path d="M745 192q137-45 265 12l-9 227q-84 44-174 16-69-21-105-87z" fill="url(#woods)" opacity=".75"/>
+<path d="M374 137q137-42 342-1l134 116q-91 73-227 60-197-20-346 30l-53-89z" fill="url(#mountainFill)" opacity=".94"/>
+<path d="M160 152q-61 38-73 110 28 61 105 72 79-30 105-97-37-63-137-85z" fill="#d7d0bc" stroke="#a79d84" stroke-width="2"/>
+
+<!-- rivers and paths -->
+<path class="water" d="M286 166q44 60 26 119t77 82q73 31 73 110t106 93q72 13 128 101"/><path class="waterline" d="M286 166q44 60 26 119t77 82q73 31 73 110t106 93q72 13 128 101"/>
+<text x="484" y="526" class="small" fill="#536d74" transform="rotate(20 484 526)">RIME RIVER</text>
+<path class="route" d="M521 380Q512 292 523 206"/>
+<path class="route" d="M505 374Q393 285 256 244"/>
+<path class="route" d="M543 382Q684 335 861 326"/>
+<path class="route" d="M515 409Q450 502 396 602"/>
+<path class="route" d="M494 400Q365 451 251 523"/>
+
+<!-- named terrain -->
+<text x="524" y="151" text-anchor="middle" class="region">Graycap Range</text>
+<text x="188" y="198" text-anchor="middle" class="place">Giant’s Pass</text>
+<text x="852" y="249" text-anchor="middle" class="region">Rimewood</text>
+<text x="866" y="450" text-anchor="middle" class="place">Birchway · East Road</text>
+<text x="362" y="672" text-anchor="middle" class="region">Mammoth Grounds</text>
+<text x="182" y="583" text-anchor="middle" class="region">Direwolf Wood</text>
+<text x="389" y="319" text-anchor="middle" class="place">Rime Ford</text>
+
+<!-- contested sites -->
+<g transform="translate(526 214)"><circle r="12" class="marker"/><path d="M-4 3 0-5 4 3z" fill="#9a493e"/><text x="19" y="4" class="faction">GOLIATH DUNGEONS &amp; MINES</text></g>
+<g transform="translate(254 244)"><circle r="12" class="marker"/><path d="M-5 4V-3L0-7 5-3V4z" fill="#9a493e"/><text x="-15" y="-22" text-anchor="middle" class="faction">FROST GIANT MARCH</text></g>
+<g transform="translate(857 327)"><circle r="12" class="marker"/><path d="M-4-5h8v10h-8zM-2-2h4" fill="#9a493e"/><text x="16" y="4" class="faction">WHITE DRAGONBORN</text></g>
+
+<!-- wildlife -->
+<g transform="translate(393 602)" fill="#65745e" stroke="#465544" stroke-width="1.5"><path d="M-22 5q-6-9 3-15l10-1 7-7 6 2 1 7 11 4 5 10-6 1-4-6-20 1-4 7z"/><path d="M-13 11v7m25-7v7" fill="none"/><path d="M13-12q7-8 13-2m-6-5q8 0 9 5" fill="none"/></g>
+<text x="410" y="633" class="faction">MAMMOTH HERDS</text>
+<g transform="translate(251 523)" fill="#65745e" stroke="#465544" stroke-width="1.5"><path d="M-23 3q0-12 10-13l7-7 9 2 3 5 9 1 6 9-4 5-7-4-16 2-5 7-5-1 1-7z"/><path d="M-11 9v7m19-7v7" fill="none"/></g>
+<text x="266" y="552" class="faction">DIREWOLF PACKS</text>
+
+<!-- village -->
+<g transform="translate(521 389)"><circle r="25" fill="#f6edcf" stroke="#7d3e35" stroke-width="3"/><path d="M-15 5v-11l15-11 15 11V5h-9v-9h-12v9z" fill="#7d3e35"/><path d="M-18-6 0-20 18-6" fill="none" stroke="#5b302a" stroke-width="3"/></g>
+<text x="555" y="387" class="place" font-size="22">KELD</text><text x="555" y="407" class="small">HUMAN VILLAGE · RIME FORD</text>
+
+<!-- compass -->
+<g transform="translate(1004 119)"><circle r="31" fill="#f5f0e4" stroke="#8a806d" stroke-width="1.5"/><path d="M0-24 7 0 0 24-7 0z" fill="#7d3e35"/><path d="M0-24 0 24 7 0z" fill="#d6c6a5"/><text x="0" y="-39" text-anchor="middle" class="place">N</text><text x="40" y="5" class="small">E</text><text x="0" y="49" text-anchor="middle" class="small">S</text><text x="-42" y="5" text-anchor="middle" class="small">W</text></g>
+
+<!-- route key -->
+<g transform="translate(680 559)"><rect x="0" y="0" width="365" height="139" rx="3" fill="#f3eedf" stroke="#9a907b"/><text x="18" y="25" class="place">FROM KELD</text><path d="M20 45h38" class="route"/><text x="72" y="50" class="small">N · Graycap Range — Goliath delvers</text><path d="M20 69h38" class="route"/><text x="72" y="74" class="small">NW · Giant’s Pass — Frost Giant raiders</text><path d="M20 93h38" class="route"/><text x="72" y="98" class="small">E · Birchway — White Dragonborn</text><path d="M20 117h38" class="route"/><text x="72" y="122" class="small">S / SW · Mammoth Grounds &amp; Direwolf Wood</text></g>
+<text x="58" y="706" class="small" fill="#746c5b">A stable story map · paths mark the five hunting approaches from Keld</text>
+</svg>
