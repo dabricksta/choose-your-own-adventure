@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>The Initiate’s Hunt — interactive fiction prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <main class="wrap">
+    <header class="masthead">
+      <h1>The Initiate’s Hunt</h1>
+      <p class="note">A first-arc prototype in the Frostmarch. Keld’s five hunting routes and their encounters are fixed
+        on the realm map; you author actions in your own words and consequences follow from the scene and state.</p>
+    </header>
+
+    <details class="run-tools">
+      <summary>Save &amp; replay</summary>
+      <div class="run-controls">
+        <label for="run-seed">Run seed
+          <input id="run-seed" autocomplete="off" spellcheck="false">
+        </label>
+        <button id="save-now" type="button">Save now</button>
+        <button id="resume-run" type="button">Resume saved run</button>
+        <button id="replay-seed" type="button">Start / replay this seed</button>
+        <button id="new-run" type="button">New random run</button>
+      </div>
+      <p class="save-note" id="save-note" aria-live="polite">The story and draft auto-save on this device. The seed
+        repeats random mutation rolls; model classifications may vary. API keys are never saved.</p>
+    </details>
+
+    <details class="realm-map">
+      <summary>View map of the Frostmarch</summary>
+      <img src="frostmarch-realm-map.svg" alt="Map of the Frostmarch showing Keld and five fixed hunting routes.">
+      <p class="map-caption"><a href="frostmarch-realm-map.svg" target="_blank" rel="noopener">Open the full-size realm
+          map</a></p>
+    </details>
+
+    <details class="provider" id="provider-panel" open>
+      <summary>Model provider &amp; connection</summary>
+      <div class="provider-grid">
+        <label>Provider
+          <select id="provider">
+            <option value="demo">Local demo (no model / no key)</option>
+            <option value="claude-app">Claude in-app</option>
+            <option value="anthropic">Claude API</option>
+            <option value="openai">OpenAI API</option>
+            <option value="qwen">Qwen API</option>
+            <option value="local">Local OpenAI-compatible model</option>
+            <option value="jev">Jev classifier</option>
+          </select>
+        </label>
+        <label>Model
+          <input id="model" value="local-demo" autocomplete="off">
+        </label>
+        <label id="endpoint-wrap" hidden>API endpoint
+          <input id="endpoint" value="" autocomplete="off" spellcheck="false">
+        </label>
+        <label id="key-wrap" hidden>API key
+          <input id="api-key" type="password" placeholder="Enter key; kept for this tab only" autocomplete="off">
+        </label>
+      </div>
+      <p class="provider-help" id="provider-help">Demo mode uses a small local keyword classifier. No story text leaves
+        this page. Choose a hosted provider and enter your own API key to use that model.</p>
+      <div class="provider-status" id="provider-status" aria-live="polite"></div>
+    </details>
+
+    <div id="transcript" role="log" aria-live="polite" aria-relevant="additions"></div>
+    <div id="stats" class="stats" aria-live="polite" hidden></div>
+    <div id="composer"></div>
+  </main>
+
+  <p id="boot-warning" class="boot-warning" hidden>
+    This page uses JavaScript modules, which browsers block on <code>file://</code>. Serve the folder over HTTP
+    (for example <code>python -m http.server 8000</code>) and open <code>http://localhost:8000/</code>.
+  </p>
+  <noscript>This prototype needs JavaScript enabled.</noscript>
+  <script>
+    if (location.protocol === 'file:') document.querySelector('#boot-warning').hidden = false;
+  </script>
+  <script type="module" src="src/main.js"></script>
+</body>
+
+</html>
