@@ -24,7 +24,7 @@ export function demoClassify(text, fields) {
       ['observant', ['observe', 'observant', 'notice', 'watch', 'see', 'perceive', 'perceptive', 'aware']]
     ],
     approach: [
-      ['ask_for_help', ['help', 'companion', 'party', 'invite']],
+      ['ask_for_help', ['help', 'companion', 'party', 'invite', 'hunter', 'come with me', 'with me', 'join me']],
       ['prepare', ['prepare', 'pack', 'gear', 'food', 'map', 'weapon']],
       ['leave_quickly', ['leave now', 'rush', 'quickly', 'without']]
     ],
@@ -37,11 +37,18 @@ export function demoClassify(text, fields) {
     ],
     tactic: [
       ['retreat', ['retreat', 'run away', 'flee', 'withdraw', 'escape']],
+      ['mend', ['bind', 'bandage', 'treat', 'mend', 'heal', 'herb', 'herbs', 'salve', 'patch', 'stop the bleeding']],
+      ['endure', ['brace', 'endure', 'grit', 'stand firm', 'weather the', 'take the blow', 'set my feet', 'dig in']],
       ['negotiate', ['talk', 'trade', 'parley', 'negotiate', 'offer terms', 'promise']],
       ['use_gear', ['gear', 'weapon', 'rope', 'spear', 'knife', 'bow']],
       ['use_environment', ['tree', 'rock', 'ice', 'terrain', 'fire', 'trap']],
       ['evade', ['dodge', 'evade', 'avoid', 'duck', 'circle']],
       ['attack', ['attack', 'strike', 'stab', 'shoot', 'hit', 'fight']]
+    ],
+    beat: [
+      ['clever', ['snare', 'cut the', 'pry', 'sample', 'pull', 'spill', 'lashings', 'strongbox', 'pocket', 'sabotage']],
+      ['careful', ['study', 'watch', 'observe', 'read', 'circle', 'wait', 'follow', 'downwind', 'upwind', 'climb', 'count', 'mark', 'shadow', 'keep to']],
+      ['bold', ['charge', 'rush', 'run at', 'close', 'drive', 'break', 'meet', 'straight at', 'head-on']]
     ],
     essence: [
       ['consume', ['eat', 'drink', 'consume', 'swallow', 'absorb']],

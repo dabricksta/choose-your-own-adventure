@@ -11,6 +11,7 @@ import {
   OUTCOMES,
   PHASES,
   LOG_CLASSES,
+  BEAT_ACTIONS,
   DIRECTIONS
 } from './content.js';
 
@@ -60,6 +61,7 @@ export function blankState(seed) {
     direction: null,
     monster: null,
     monsterKind: null,
+    beat: { variant: 0, choice: null },
     health: 3,
     maxHealth: 3,
     injuries: [],
@@ -97,7 +99,9 @@ function normalizeCombat(value) {
     rounds: clamp(toInt(value.rounds, 0), 0, 999),
     exposed: !!value.exposed,
     allyHelpUsed: !!value.allyHelpUsed,
-    negotiated: !!value.negotiated
+    negotiated: !!value.negotiated,
+    bloodDrawn: !!value.bloodDrawn,
+    braced: !!value.braced
   };
 }
 
@@ -157,6 +161,10 @@ export function normalizeState(input) {
     conflictFocus: text(source.conflictFocus, 120) || null,
     encounter: normalizeEncounter(source.encounter),
     mutation: text(source.mutation, 40) || null,
+    beat: {
+      variant: clamp(toInt(source.beat?.variant, 0), 0, 9),
+      choice: BEAT_ACTIONS.includes(source.beat?.choice) ? source.beat.choice : null
+    },
     combat: normalizeCombat(source.combat),
     companion: !!source.companion,
     factionStanding: normalizeStanding(source.factionStanding),

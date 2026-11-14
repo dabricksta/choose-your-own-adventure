@@ -20,6 +20,7 @@ const providerEl = document.querySelector('#provider');
 const modelEl = document.querySelector('#model');
 const endpointEl = document.querySelector('#endpoint');
 const keyEl = document.querySelector('#api-key');
+const providerName = document.querySelector('#provider-name');
 const providerHelp = document.querySelector('#provider-help');
 const providerStatus = document.querySelector('#provider-status');
 
@@ -33,6 +34,7 @@ function applyProviderPreset() {
   document.querySelector('#endpoint-wrap').hidden = hide;
   providerHelp.textContent = preset.help;
   providerStatus.textContent = '';
+  if (providerName) providerName.textContent = providerEl.selectedOptions[0]?.textContent || providerEl.value;
   keyEl.placeholder = providerEl.value === 'local'
     ? 'Optional for local servers; kept for this tab only'
     : 'Enter key; kept for this tab only';

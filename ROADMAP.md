@@ -3,8 +3,41 @@
 The prototype’s core bet is sound: **treat freeform language as intent, then resolve outcomes with deterministic rules.**
 The next iterations should deepen that bet rather than replace it with prose generation.
 
-Current state: second iteration (`v0.2`), single-encounter arc, five fixed routes, one deterministic combat system,
-local demo classifier plus six hosted/typed adapters.
+Current state: third iteration (`v0.3`), single-encounter arc with an approach beat per route, five fixed routes,
+one deterministic combat system, two specialty moves, local demo classifier plus six hosted/typed adapters, and a
+browser smoke suite.
+
+---
+
+## Shipped in v0.3
+
+### Depth
+
+- **Approach beat per route.** Every route now has a short scene before the encounter with three authored
+  consequences: *careful* (first opening, and factions remember that you respected their claim), *bold* (the foe
+  starts wounded, but you take a knock and blood is drawn), *clever* (an extra essence type for the loot pool).
+  The seed picks one of two authored scene variants per route.
+- **Specialty moves.** `enduring` gains `endure` (brace once per fight; the next wound is spent on your guard) and
+  `healer` gains `mend` (recover 1 health and clear one injury mid-fight). The extra tactic label is injected into
+  the closed label set only for the matching specialty, so the classifier and the manual fallback both stay honest.
+- **Faction standing has teeth.** Killing an intelligent opponent lowers that faction's standing. Once blood is
+  drawn, parley only succeeds if standing ≥ 1 — so the careful beat can buy you a conversation you would otherwise
+  have lost. The return narration and the ending both react to positive and negative standing.
+
+### Testing
+
+- `tests/smoke.html` + `tests/smoke.js`: 12 browser tests that drive the real game in an iframe in demo mode and
+  assert on outcomes, loot, standing, specialty moves, save restore, and disclosure alignment. No framework, no
+  build step. A deliberate mutation (forcing parley to always succeed) was used to confirm the suite fails.
+- Fixed a demo-classifier miss found while writing the tests: “ask a hunter to come with me” now maps to
+  `ask_for_help`, so the companion mechanic actually engages.
+
+### Presentation
+
+- The provider panel is collapsed by default and its summary shows the active provider.
+- All three disclosures (`Save & replay`, map, provider) now share one left edge and marker position; the old
+  inner padding/border box was removed.
+- `styles.css` is dedented to normal CSS indentation.
 
 ---
 
@@ -67,13 +100,12 @@ local demo classifier plus six hosted/typed adapters.
 
 | Gap | Why it matters | Suggested fix |
 | --- | --- | --- |
-| No automated tests | Every rules change is a manual regression risk | Node-free browser test page or a small Vitest/Playwright setup; start with pure state, demo classifier, and combat matrices |
-| Only one encounter per run | The arc resolves too quickly and routes feel like skins | Two to three beats per route: approach/tracking, complication, encounter |
-| Three specialties have no perk | `enduring`, `healer`, `leader` are labels without mechanics | Give each a move: pressure reduction, a recovery round, a mid-fight recruit |
-| Faction standing is display-only | Parley’s reward does not change later play | Gate audience lines, encounter variants, and parley difficulty on standing |
+| No unit tests | Rules changes are still guarded by a hand-started browser suite, not CI | Extract pure `resolveCombatAction(state, tactic, enemy)` and table-test the tactic/threat/specialty matrix |
+| Only one encounter per run | The arc resolves after one beat and one fight; routes still share a shape | Add a second encounter or a fork on one route first, as a template |
+| `leader` has no perk | One specialty is still a label without mechanics | Rally once per fight: negate pressure, owe a favour with a social cost |
 | Gear dominates preparation | Two 2-damage openers can end most fights | Give speed/ally/social trade-offs, or make gear situational |
-| Direction parser ignores negation | “I don’t go south” routes south | Prefer the classifier when negation is present, or always show the route confirmation for regex matches |
-| Provider panel is always open | Pushes the story below the fold on mobile | Collapse by default and put current provider name in the summary |
+| Direction parser ignores negation | “I don’t go south” routes south | Prefer the classifier when negation is present, or always confirm regex matches |
+| Standing does not persist across runs | The faction ledger resets with each new run | Cross-run ledger in local storage or a village hub |
 
 ### Medium value
 
@@ -96,36 +128,30 @@ local demo classifier plus six hosted/typed adapters.
 
 ---
 
-## v0.3 — Depth
+## v0.4 — Depth, continued
 
-Goal: make each route feel like a short story rather than a single gate, and make every build choice matter.
+Goal: make each route a short chain rather than one beat and one gate.
 
 ### Content and structure
 
-- **Beat-based routes.** Each direction defines 2–3 ordered beats with variants selected by seed and approach:
-  - travel/tracking beat (learn something, spend time, gain position),
-  - complication (weather, rival, wounded animal, evidence),
-  - encounter,
-  - optional aftermath.
-- **Route-specific objectives.** Not every hunt is “kill the monster.” Examples: recover sled goods, drive off a
-  delver without a body, secure a mineral sample, leave the herd intact, rescue a missing trapper.
+- **A second encounter per route.** The v0.3 approach beat is the template: a scene, three authored consequences,
+  then a state change. Add one more beat after the fight (aftermath/choice) or before it (tracking/complication).
+  Prove the shape on one route before repeating it.
+- **Route-specific objectives.** Not every hunt is “kill the monster”: recover sled goods, drive off a delver
+  without a body, secure a mineral sample, leave the herd intact, rescue a missing trapper.
 - **Authored encounter variants** selected by faction standing and prior beat outcomes.
 - **Ending variants** keyed to outcome, loot, stance, audience, and faction standing. At least one ending per route
   that is not simply “victory.”
 
 ### Rules
 
-- **Specialty moves** (one per specialty):
-  - `enduring` — ignore the first pressure threshold once per fight.
-  - `healer` — spend a round to remove a wound or convert pressure into recovery.
-  - `leader` — call in aid once, even without a companion, at a social cost.
-  - `observant` — reveal the foe’s next pressure and cancel exposure.
-  - `quick` — act first when exposed.
-  - `strong` — break terrain/grapple instead of only bonus attack damage.
+- **The `leader` move** — the last specialty without one: rally once per fight, negate pressure this round, and
+  record a favour owed that the ending mentions.
+- **Write down the other perks.** `observant`, `quick`, `strong`, `cunning`, and `tracker` have effects implied by
+  `skilledAttack` / `skilledTerrain`; make each an explicit named move or state it in the README.
 - **Injuries with teeth.** Named injuries impose a specific penalty (reduced gear, worse negotiation, slower travel)
   and clear at the village.
 - **Typed essences.** Consuming fire/shadow/regrowth has distinct effects and risks. Offering moves faction standing.
-  Keeping enables later crafting or trade.
 - **Negotiation depth.** Terms can include tribute, withdrawal, information, or a promise. Success depends on foe,
   standing, companion, and whether blood has been drawn.
 - **Preparation trade-offs.** Speed grants first-strike/position; ally grants help but costs social capital; gear is
@@ -133,15 +159,15 @@ Goal: make each route feel like a short story rather than a single gate, and mak
 
 ### Engineering
 
-- Extract a pure `resolveCombatAction(state, tactic)` and table-driven tests for every tactic/threat/specialty matrix.
-- Add a content schema check at boot (route fields, label arrays, preset shapes).
-- Add a browser smoke-test page that drives the game in demo mode through each outcome.
+- Extract a pure `resolveCombatAction(state, tactic, enemy)` and table-test the tactic/threat/specialty matrix. The
+  browser smoke suite stays as the integration layer.
+- Add a content schema check at boot (route fields, beat option effects, label arrays, preset shapes).
 - Add structured run history (`runId`, seed, outcome, route, choices) without changing the active save format.
 - Add an export/import run JSON action.
 
 ---
 
-## v0.4 — World
+## v0.5 — World
 
 Goal: make Keld a place that remembers.
 
@@ -183,10 +209,8 @@ Goal: make Keld a place that remembers.
 
 If only one more increment fits:
 
-1. Add a browser smoke test that covers all four outcomes (victory, parley, retreat, collapse) and a save/reload.
-2. Add one second beat to each route, selected deterministically.
-3. Implement two specialty moves (`enduring`, `healer`) as proof that the label set can carry mechanics.
-4. Make faction standing change one audience line and one parley condition.
-5. Collapse the provider panel by default and show the active provider in its summary.
-
-That is enough to prove the depth direction without expanding the world or adding a backend.
+1. Add one more beat to a single route (east is the simplest) so the chain shape is proven before repeating it.
+2. Implement the `leader` move (`rally`) and assert it in the smoke suite.
+3. Extract combat resolution into a pure function and add table tests for the tactic/threat/specialty matrix.
+4. Make the direction parser negation-aware, or always confirm regex matches with the route buttons.
+5. Add a non-lethal ending per route (drive off, recover the goods, leave the herd) keyed to the beat choice.

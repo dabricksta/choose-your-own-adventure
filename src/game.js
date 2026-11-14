@@ -7,6 +7,8 @@ import {
   SPECIALTIES,
   APPROACHES,
   TACTICS,
+  BEAT_ACTIONS,
+  SPECIALTY_MOVES,
   ESSENCE_ACTIONS,
   CARCASS_ACTIONS,
   STANCES
@@ -156,6 +158,7 @@ function restorePrompt() {
     case 'specialty': showSpecialtyPrompt(false); return true;
     case 'hunt': showHuntPrompt(); return true;
     case 'direction': showDirectionPrompt(); return true;
+    case 'beat': beatPrompt(); return true;
     case 'fight': fightPrompt(false); return true;
     case 'loot': lootPrompt(false); return true;
     case 'audience': renderAudienceChoices(); return true;
@@ -327,6 +330,7 @@ function applyDirection(route, text) {
   state.essencesFound = direction.essences.slice();
   state.essenceOutcome = null;
   state.mutation = null;
+  state.beat = { variant: 0, choice: null };
   state.loot = { materialsTaken: false, meatTaken: false, hideTaken: false };
   state.outcome = null;
   state.defeated = false;
@@ -351,7 +355,9 @@ function applyDirection(route, text) {
     rounds: 0,
     exposed: false,
     allyHelpUsed: false,
-    negotiated: false
+    negotiated: false,
+    bloodDrawn: false,
+    braced: false
   };
 
   player(text);
@@ -359,6 +365,89 @@ function applyDirection(route, text) {
   say(direction.scene);
   say(state.encounter.conflict, 'bridge');
   divider();
+  startBeat();
+}
+
+// The beat is a short approach scene before the fight. It is deterministic:
+// the seed picks one of the authored variants, and the player's described
+// approach picks one of the authored consequences.
+function startBeat() {
+  const beat = DIRECTIONS[state.direction]?.beat;
+  if (!beat) {
+    fightPrompt();
+    return;
+  }
+  state.beat = {
+    variant: Math.floor(nextRandom(state) * beat.variants.length) % beat.variants.length,
+    choice: null
+  };
+  say(beat.variants[state.beat.variant]);
+  beatPrompt();
+}
+
+function beatPrompt() {
+  phase = 'beat';
+  const beat = DIRECTIONS[state.direction]?.beat;
+  if (!beat) {
+    fightPrompt();
+    return;
+  }
+  form(beat.prompt, 'Describe what you do before the fight…', 'Close in', submitBeat);
+}
+
+function submitBeat() {
+  const input = document.querySelector('#answer');
+  const text = input ? input.value.trim() : '';
+  classified({
+    text,
+    emptyText: 'Write what you do first.',
+    busyText: 'Reading your approach…',
+    fields: { beat: [...BEAT_ACTIONS] },
+    context: `The player is closing on ${state.monster} (${state.encounter?.species}) in ${state.encounter?.region} and has not been seen yet. Classify the approach. careful = watch, read the ground, take position, wait. bold = charge, close fast, commit. clever = use the moment for gain, take something, set a trap.`,
+    fallbackNote: 'Choose the approach closest to what you described.',
+    apply: ({ beat }, spoken) => resolveBeat(spoken, beat)
+  });
+}
+
+function resolveBeat(text, label) {
+  const beat = DIRECTIONS[state.direction]?.beat;
+  const option = beat?.options?.[label];
+  const effect = option?.effect || {};
+  const notes = [];
+
+  player(text);
+  state.beat.choice = label;
+
+  if (effect.edge) {
+    state.combat.exposed = true;
+    notes.push('The first opening is yours.');
+  }
+  if (effect.wound) {
+    state.combat.foeHP = Math.max(1, state.combat.foeHP - effect.wound);
+    state.combat.bloodDrawn = true;
+    notes.push(`${state.monster} is already hurt.`);
+  }
+  if (effect.hurt) {
+    state.health = Math.max(1, state.health - effect.hurt);
+    state.injuries.push('bruised ribs');
+    notes.push('You carry a knock into the fight.');
+  }
+  if (effect.bonus) {
+    addUnique(state.essencesFound, effect.bonus);
+    state.encounter.essences = state.essencesFound.slice();
+    notes.push(`You also carry ${effect.bonus}-aligned essence.`);
+  }
+  if (effect.standing) {
+    const species = state.encounter.species;
+    state.factionStanding[species] = (state.factionStanding[species] || 0) + effect.standing;
+    notes.push(`${species} will remember that you left their claim standing.`);
+  }
+
+  say(`The approach resolves as ${label}.`, 'annotation');
+  say(option?.outcome || 'You wait, and the moment passes. Nothing is gained.', 'bridge');
+  if (notes.length) say(notes.join(' '), 'annotation');
+  divider();
+  stats(state);
   fightPrompt();
 }
 
@@ -382,12 +471,17 @@ function fightPrompt(announce = true) {
 function submitFight() {
   const input = document.querySelector('#answer');
   const text = input ? input.value.trim() : '';
+  const moves = SPECIALTY_MOVES[state.specialty] || [];
+  const tacticLabels = [...TACTICS.filter(label => label !== 'other'), ...moves, 'other'];
+  const moveHelp = moves.length
+    ? ` The ${state.specialty} specialty also allows: ${moves.join(', ')}.`
+    : '';
   classified({
     text,
     emptyText: 'Write an action first.',
     busyText: 'Reading your action…',
-    fields: { tactic: TACTICS },
-    context: `Encounter with ${state.monster}, a ${state.encounter?.species} threat. Kind: ${state.monsterKind}. Terrain: ${state.encounter?.region}. Specialty: ${state.specialty}. Gear charges: ${state.gear}. Companion present: ${state.companion}. Current enemy vitality: ${state.combat?.foeHP}/${state.encounter?.vitality}. Current danger: ${state.combat?.pressure}. For an intelligent humanoid opponent, classify attempts to communicate, bargain, warn, or trade as negotiate. For an animal, do not classify nonverbal calming as negotiation.`,
+    fields: { tactic: tacticLabels },
+    context: `Encounter with ${state.monster}, a ${state.encounter?.species} threat. Kind: ${state.monsterKind}. Terrain: ${state.encounter?.region}. Specialty: ${state.specialty}. Gear charges: ${state.gear}. Companion present: ${state.companion}. Current enemy vitality: ${state.combat?.foeHP}/${state.encounter?.vitality}. Current danger: ${state.combat?.pressure}. Blood has been drawn: ${!!state.combat?.bloodDrawn}. For an intelligent humanoid opponent, classify attempts to communicate, bargain, warn, or trade as negotiate. For an animal, do not classify nonverbal calming as negotiation.${moveHelp}`,
     fallbackNote: 'Choose the tactic closest to what you described.',
     apply: ({ tactic }, spoken) => resolveCombat(spoken, tactic)
   });
@@ -405,6 +499,10 @@ function resolveCombat(text, tactic) {
   player(text);
   combat.rounds += 1;
   const intelligent = ['goliath', 'giant', 'dragonborn'].includes(state.monsterKind);
+  const standing = state.factionStanding[enemy.species] || 0;
+  // You can talk before steel is drawn. Once blood is on the ground, only a
+  // faction that already respects you will still listen.
+  const canParley = !combat.bloodDrawn || standing >= 1;
 
   if (tactic === 'retreat') {
     state.outcome = 'retreat';
@@ -416,7 +514,7 @@ function resolveCombat(text, tactic) {
     return;
   }
 
-  if (tactic === 'negotiate' && intelligent && !combat.negotiated) {
+  if (tactic === 'negotiate' && intelligent && !combat.negotiated && canParley) {
     combat.negotiated = true;
     state.outcome = 'parley';
     state.defeated = false;
@@ -476,11 +574,28 @@ function resolveCombat(text, tactic) {
       pressure = enemy.threat + 1;
       description = 'You reach for gear you did not bring. The moment costs you.';
     }
+  } else if (tactic === 'endure' && state.specialty === 'enduring') {
+    combat.braced = true;
+    pressure = 0;
+    description = 'You plant your feet and take the blow on your guard instead of giving ground.';
+  } else if (tactic === 'mend' && state.specialty === 'healer') {
+    pressure = Math.max(0, enemy.threat - 1);
+    if (state.health < state.maxHealth) {
+      state.health += 1;
+      state.injuries.pop();
+      description = 'You bind the worst wound with a strip of cloak. The foe closes while your hands are busy.';
+    } else {
+      description = 'You have no wound to bind. The pause only steadies you.';
+    }
   } else if (tactic === 'negotiate') {
     pressure = enemy.threat + 1;
-    description = intelligent
-      ? 'You repeat your terms without offering anything new. The rival treats it as delay and presses the attack.'
-      : 'The animal does not understand your words. It presses closer.';
+    if (!intelligent) {
+      description = 'The animal does not understand your words. It presses closer.';
+    } else if (!canParley) {
+      description = `${enemy.species} see the blood on your weapon and will not hear terms. They press the attack.`;
+    } else {
+      description = 'You repeat your terms without offering anything new. The rival treats it as delay and presses the attack.';
+    }
   } else {
     pressure = enemy.threat + 1;
     description = 'You hesitate; the opponent uses the opening.';
@@ -499,13 +614,20 @@ function resolveCombat(text, tactic) {
   }
 
   combat.foeHP = Math.max(0, combat.foeHP - damage);
+  if (damage > 0) combat.bloodDrawn = true;
   combat.pressure = Math.max(0, combat.pressure + pressure);
 
   if (combat.pressure >= enemy.threat + 1) {
-    state.health = Math.max(0, state.health - 1);
-    state.injuries.push('fresh wound');
-    combat.pressure = 0;
-    description += ' The opponent lands a blow before you can reset your footing.';
+    if (combat.braced) {
+      combat.braced = false;
+      combat.pressure = 0;
+      description += ' The blow lands on your guard and costs you nothing.';
+    } else {
+      state.health = Math.max(0, state.health - 1);
+      state.injuries.push('fresh wound');
+      combat.pressure = 0;
+      description += ' The opponent lands a blow before you can reset your footing.';
+    }
   }
 
   if (combat.foeHP === 0) {
@@ -517,6 +639,10 @@ function resolveCombat(text, tactic) {
         ? ' One wolf falls; the rest of the pack scatters.'
         : 'The mammoth falls after a costly struggle; the herd withdraws, still dangerous.')
       : ` The ${state.monster} falls. Its death leaves essences behind.`;
+    if (intelligent) {
+      state.factionStanding[enemy.species] = (state.factionStanding[enemy.species] || 0) - 1;
+      description += ` ${enemy.species} will hear that one of theirs did not come home.`;
+    }
   } else if (state.health === 0) {
     state.defeated = false;
     state.outcome = 'collapse';
@@ -652,6 +778,13 @@ function startReturn() {
     say(injury ? `Your ${injury} aches with every step.` : 'Your wounds ache with every step.');
   }
 
+  const standing = state.factionStanding[state.conflictFocus] || 0;
+  if (standing > 0) {
+    say(`Word has gone ahead of you: the ${state.conflictFocus} speak of a hunter who respected their claim.`, 'bridge');
+  } else if (standing < 0) {
+    say(`Word has gone ahead of you, and it is not kind: the ${state.conflictFocus} name you a killer of their people.`, 'bridge');
+  }
+
   divider();
   stats(state);
   phase = 'audience';
@@ -762,6 +895,13 @@ function resolveTalk(text, stance) {
     end += ' The healer keeps you near the fire until your strength returns.';
   } else if (state.outcome === 'retreat') {
     end += ' The elders note that you chose to come back alive.';
+  }
+
+  const standing = state.factionStanding[state.conflictFocus] || 0;
+  if (standing > 0) {
+    end += ` The ${state.conflictFocus} will hear that Keld kept faith.`;
+  } else if (standing < 0) {
+    end += ` The ${state.conflictFocus} will not forget what you did on that trail.`;
   }
 
   say(end, 'end');
