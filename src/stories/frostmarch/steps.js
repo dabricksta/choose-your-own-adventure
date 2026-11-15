@@ -1,330 +1,72 @@
-// Game flow. State, prompts, and the deterministic consequences of each choice.
+// Frostmarch flow: every phase hook, prompt, and deterministic consequence.
+//
+// The session supplies the medium (say/divider/form/choices/classified/enter/
+// save). Everything in this file is this story's rules. No DOM access.
 
 import {
-  DIRECTIONS,
-  ROUTES,
-  WILD_MUTATIONS,
-  SPECIALTIES,
   APPROACHES,
-  TACTICS,
   BEAT_ACTIONS,
-  SPECIALTY_MOVES,
-  ESSENCE_ACTIONS,
   CARCASS_ACTIONS,
-  STANCES
+  DIRECTIONS,
+  ESSENCE_ACTIONS,
+  ROUTES,
+  SPECIALTIES,
+  SPECIALTY_MOVES,
+  STANCES,
+  TACTICS,
+  WILD_MUTATIONS,
+  explicitDirection
 } from './content.js';
-import {
-  blankState,
-  normalizeState,
-  readSave,
-  writeSave,
-  nextRandom,
-  randomSeed
-} from './state.js';
-import {
-  transcriptLog,
-  composer,
-  statsEl,
-  seedEl,
-  say,
-  divider,
-  resetTranscript,
-  renderLog,
-  stats,
-  status,
-  form,
-  choices,
-  lockStep,
-  unlockStep,
-  clearFallback,
-  renderFallback,
-  setSaveNote,
-  setResumeEnabled,
-  fail
-} from './ui.js';
-import { classify, demoClassify, explicitDirection } from './classify.js';
+import { addUnique } from '../../engine/util.js';
 
-const DEFAULT_SAVE_NOTE = 'Saved on this device. Seed repeats random mutation rolls; model classifications may vary. API keys are never saved.';
+// ---------------------------------------------------------------------------
+// Small shared steps
 
-let state = null;
-let phase = null;
-let restoring = false;
-let saveTimer = null;
-
-export function debugInfo() {
-  return { state, phase, logLength: transcriptLog.length };
-}
-
-export function saveProgress() {
-  if (restoring || !state) return;
-  clearTimeout(saveTimer);
-  saveTimer = null;
-  const draft = document.querySelector('#answer')?.value || '';
-  const result = writeSave(state, phase, transcriptLog, draft);
-  if (result.ok) {
-    setSaveNote(DEFAULT_SAVE_NOTE);
-    setResumeEnabled(true);
-  } else {
-    setSaveNote('This browser could not save locally. Keep this tab open to continue.');
-  }
-}
-
-export function scheduleSave() {
-  if (restoring || !state) return;
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(saveProgress, 300);
-}
-
-function player(text) {
-  say(`“${text}”`, 'scene player');
-}
-
-function addUnique(list, value) {
-  if (value && !list.includes(value)) list.push(value);
-}
-
-async function classified(step) {
-  clearFallback();
-  if (!step.text) {
-    status(step.emptyText || 'Write a response first.');
-    return;
-  }
-  lockStep(step.busyText || 'Reading your action…');
-  let labels;
-  try {
-    labels = await classify(step.text, step.fields, step.context);
-  } catch (error) {
-    console.error(error);
-    status(fail(error));
-    unlockStep();
-    renderFallback(
-      step,
-      step.fallbackNote,
-      demoClassify(step.text, step.fields),
-      nextStep => classified(nextStep)
-    );
-    return;
-  }
-  try {
-    step.apply(labels, step.text);
-  } catch (error) {
-    console.error(error);
-    status(fail(error));
-    unlockStep();
-  }
-}
-
-function showGenderPrompt() {
-  phase = 'gender';
-  form('How do you describe your gender?', 'Use your own words, or leave blank…', 'Continue', submitGender);
-}
-
-function showSpecialtyPrompt(announce = true) {
-  phase = 'specialty';
-  if (announce) {
-    say('The hearth-keeper turns a carved token in her palm. “What are you known for among your people?”');
-  }
-  form('Describe your specialty in your own words.', 'A knack, practice, reputation, or way of seeing…', 'Continue', submitSpecialty);
-}
-
-function showHuntPrompt() {
-  phase = 'hunt';
-  form('What do you do?', 'Describe your preparation and departure…', 'Set out', submitHunt);
-}
-
-function showDirectionPrompt() {
-  phase = 'direction';
-  form('Where do you travel, and why?', 'Name north, northwest, east, south, or southwest…', 'Follow the trail', submitDirection);
-}
-
-function showAudienceNamePrompt() {
-  phase = 'audience-name';
-  form('Who do you seek out?', 'Name the person or describe them…', 'Find them', submitAudienceName);
-}
-
-export function begin(seed) {
-  state = blankState(String(seed || randomSeed()));
-  phase = 'gender';
-  seedEl.value = state.seed;
-  resetTranscript();
-  statsEl.hidden = true;
-  say('The winter stores are low in Keld, a human village at the Rime Ford in the Frostmarch. Before you leave to hunt, the hearth-keeper asks who you are becoming.');
-  showGenderPrompt();
-}
-
-function restorePrompt() {
-  switch (phase) {
-    case 'gender': showGenderPrompt(); return true;
-    case 'specialty': showSpecialtyPrompt(false); return true;
-    case 'hunt': showHuntPrompt(); return true;
-    case 'direction': showDirectionPrompt(); return true;
-    case 'beat': beatPrompt(); return true;
-    case 'fight': fightPrompt(false); return true;
-    case 'loot': lootPrompt(false); return true;
-    case 'audience': renderAudienceChoices(); return true;
-    case 'audience-name': showAudienceNamePrompt(); return true;
-    case 'talk': audienceScene(state.audience, false); return true;
-    case 'end': renderEnd(); return true;
-    default: return false;
-  }
-}
-
-export function restoreProgress() {
-  const saved = readSave();
-  if (!saved) return false;
-
-  restoring = true;
-  let restored = false;
-  try {
-    state = normalizeState(saved.state);
-    phase = saved.phase;
-    renderLog(saved.log);
-    seedEl.value = state.seed || '';
-    if (phase === 'gender') statsEl.hidden = true;
-    else stats(state);
-    restored = restorePrompt();
-    if (!restored) throw Error('Unsupported save phase.');
-    const input = document.querySelector('#answer');
-    if (input) input.value = saved.draft || '';
-  } catch (error) {
-    console.error(error);
-    setSaveNote('The saved run could not be read. Starting a new run.');
-    return false;
-  } finally {
-    restoring = false;
-  }
-
-  saveProgress();
-  if (saved.migratedFrom) {
-    setSaveNote('Loaded a save from the previous prototype. Earlier transcript text was not restored; future saves use the new format.');
-  }
-  return true;
-}
-
-function submitGender() {
-  const input = document.querySelector('#answer');
-  const spoken = input ? input.value.trim() : '';
-  state.gender = spoken || 'unspecified';
-  if (spoken) player(spoken);
-  else say('You leave the question unanswered.', 'bridge');
-  showSpecialtyPrompt();
-}
-
-function submitSpecialty() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
-  classified({
-    text,
-    emptyText: 'Write a response first.',
-    busyText: 'Reading your description…',
-    fields: { specialty: SPECIALTIES },
-    context: 'Character creation. Map a freeform self-description to the closest practical specialty.',
-    fallbackNote: 'Choose the specialty closest to what you described.',
-    apply: ({ specialty }, spoken) => {
-      state.specialty = specialty;
-      state.specialtyText = spoken;
-      player(spoken);
-      say(`The hearth-keeper records you as ${specialty}.`, 'annotation');
-      divider();
-      startHunt();
-    }
-  });
-}
-
-function startHunt() {
-  phase = 'hunt';
-  stats(state);
-  say('At first light you shoulder your hunting gear. Keld needs meat, and the elders expect you to return with more than a story. What do you do to prepare and set out?');
-  showHuntPrompt();
-}
-
-function submitHunt() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
-  classified({
-    text,
-    emptyText: 'Write an action first.',
-    busyText: 'Reading your action…',
-    fields: { approach: APPROACHES },
-    context: 'You are setting out from Keld to hunt. Identify the main approach.',
-    fallbackNote: 'Choose the approach closest to what you described.',
-    apply: ({ approach }, spoken) => {
-      player(spoken);
-      state.gear = approach === 'prepare' ? 2 : approach === 'ask_for_help' ? 1 : 0;
-      state.companion = approach === 'ask_for_help';
-      const detail = state.companion
-        ? ' with a Keld hunter who agreed to come'
-        : approach === 'prepare'
-          ? ' with two pieces of useful hunting gear'
-          : approach === 'leave_quickly'
-            ? ' before gathering extra gear'
-            : '';
-      say(`You set out${detail}.`, 'bridge');
-      stats(state);
-      divider();
-      startDirection();
-    }
-  });
-}
-
-function startDirection() {
-  phase = 'direction';
-  say('Five trails leave Keld: north into the Graycap Range; northwest through Giant’s Pass; east along the Birchway; south onto the Mammoth Grounds; southwest into Direwolf Wood. Each route is distinct. Where do you go?');
-  showDirectionPrompt();
-}
-
-function submitDirection() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
+function submitDirection(session) {
+  const text = session.answer();
   if (!text) {
-    status('Choose a direction in your own words.');
+    session.status('Choose a direction in your own words.');
     return;
   }
 
   const direct = explicitDirection(text);
   if (direct.ambiguous) {
-    offerRouteFallback(text, 'More than one mapped route fits that description. Choose one below.');
+    offerRouteFallback(session, text, 'More than one mapped route fits that description. Choose one below.');
     return;
   }
   if (direct.route) {
-    applyDirection(direct.route, text);
+    applyDirection(session, direct.route, text);
     return;
   }
 
-  classified({
+  session.classified({
     text,
     emptyText: 'Choose a direction in your own words.',
     busyText: 'Reading the route…',
     fields: { direction: [...ROUTES, 'unclear'] },
     context: 'Fixed routes from Keld: north = Graycap Range / Goliath delver; northwest = Giant’s Pass / Frost Giant raider; east = Birchway / White Dragonborn hoarder; south = Mammoth Grounds / mammoth; southwest = Direwolf Wood / direwolf pack. Classify the direction explicitly named or clearly described by the player. If no route is clear, choose unclear.',
     fallbackNote: 'Choose the route you meant.',
-    apply: ({ direction }, spoken) => applyDirection(direction, spoken)
+    apply: ({ direction }, spoken) => applyDirection(session, direction, spoken)
   });
 }
 
-function offerRouteFallback(text, note) {
-  const fields = { direction: ROUTES };
-  renderFallback(
-    {
-      text,
-      fields,
-      apply: ({ direction }, spoken) => applyDirection(direction, spoken)
-    },
-    note,
-    demoClassify(text, fields),
-    nextStep => classified(nextStep)
-  );
+function offerRouteFallback(session, text, note) {
+  session.offerFallback({
+    text,
+    fields: { direction: ROUTES },
+    apply: ({ direction }, spoken) => applyDirection(session, direction, spoken)
+  }, note);
 }
 
-function applyDirection(route, text) {
+function applyDirection(session, route, text) {
   const direction = DIRECTIONS[route];
   if (!direction) {
-    unlockStep();
-    offerRouteFallback(text, 'No single mapped route was clear. Choose one below.');
+    session.unlock();
+    offerRouteFallback(session, text, 'No single mapped route was clear. Choose one below.');
     return;
   }
 
-  phase = 'fight';
+  const { state } = session;
   state.direction = direction.name;
   state.encounter = { ...direction };
   state.essencesFound = direction.essences.slice();
@@ -338,8 +80,8 @@ function applyDirection(route, text) {
   if (direction.kind === 'wild') {
     state.encounter.essences = direction.essences.slice();
     state.encounter.conflict = direction.conflict;
-    if (nextRandom(state) < 0.08) {
-      state.mutation = WILD_MUTATIONS[Math.floor(nextRandom(state) * WILD_MUTATIONS.length)];
+    if (session.random() < 0.08) {
+      state.mutation = WILD_MUTATIONS[Math.floor(session.random() * WILD_MUTATIONS.length)];
       state.encounter.essences.push(state.mutation);
       state.encounter.mutation = state.mutation;
     }
@@ -360,62 +102,53 @@ function applyDirection(route, text) {
     braced: false
   };
 
-  player(text);
-  say(`You travel ${direction.name}.`, 'annotation');
-  say(direction.scene);
-  say(state.encounter.conflict, 'bridge');
-  divider();
-  startBeat();
+  session.player(text);
+  session.say(`You travel ${direction.name}.`, 'annotation');
+  session.say(direction.scene);
+  session.say(state.encounter.conflict, 'bridge');
+  session.divider();
+  startBeat(session);
 }
 
 // The beat is a short approach scene before the fight. It is deterministic:
 // the seed picks one of the authored variants, and the player's described
 // approach picks one of the authored consequences.
-function startBeat() {
+function startBeat(session) {
+  const { state } = session;
   const beat = DIRECTIONS[state.direction]?.beat;
   if (!beat) {
-    fightPrompt();
+    session.enter('fight');
     return;
   }
   state.beat = {
-    variant: Math.floor(nextRandom(state) * beat.variants.length) % beat.variants.length,
+    variant: Math.floor(session.random() * beat.variants.length) % beat.variants.length,
     choice: null
   };
-  say(beat.variants[state.beat.variant]);
-  beatPrompt();
+  session.say(beat.variants[state.beat.variant]);
+  session.enter('beat');
 }
 
-function beatPrompt() {
-  phase = 'beat';
-  const beat = DIRECTIONS[state.direction]?.beat;
-  if (!beat) {
-    fightPrompt();
-    return;
-  }
-  form(beat.prompt, 'Describe what you do before the fight…', 'Close in', submitBeat);
-}
-
-function submitBeat() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
-  classified({
-    text,
+function submitBeat(session) {
+  const { state } = session;
+  session.classified({
+    text: session.answer(),
     emptyText: 'Write what you do first.',
     busyText: 'Reading your approach…',
     fields: { beat: [...BEAT_ACTIONS] },
     context: `The player is closing on ${state.monster} (${state.encounter?.species}) in ${state.encounter?.region} and has not been seen yet. Classify the approach. careful = watch, read the ground, take position, wait. bold = charge, close fast, commit. clever = use the moment for gain, take something, set a trap.`,
     fallbackNote: 'Choose the approach closest to what you described.',
-    apply: ({ beat }, spoken) => resolveBeat(spoken, beat)
+    apply: ({ beat }, spoken) => resolveBeat(session, spoken, beat)
   });
 }
 
-function resolveBeat(text, label) {
+function resolveBeat(session, text, label) {
+  const { state } = session;
   const beat = DIRECTIONS[state.direction]?.beat;
   const option = beat?.options?.[label];
   const effect = option?.effect || {};
   const notes = [];
 
-  player(text);
+  session.player(text);
   state.beat.choice = label;
 
   if (effect.edge) {
@@ -443,60 +176,43 @@ function resolveBeat(text, label) {
     notes.push(`${species} will remember that you left their claim standing.`);
   }
 
-  say(`The approach resolves as ${label}.`, 'annotation');
-  say(option?.outcome || 'You wait, and the moment passes. Nothing is gained.', 'bridge');
-  if (notes.length) say(notes.join(' '), 'annotation');
-  divider();
-  stats(state);
-  fightPrompt();
+  session.say(`The approach resolves as ${label}.`, 'annotation');
+  session.say(option?.outcome || 'You wait, and the moment passes. Nothing is gained.', 'bridge');
+  if (notes.length) session.say(notes.join(' '), 'annotation');
+  session.divider();
+  session.stats();
+  session.enter('fight');
 }
 
-function fightPrompt(announce = true) {
-  phase = 'fight';
-  if (!state.combat || !state.encounter) {
-    status('The encounter state is missing. Start a new run.');
-    return;
-  }
-  const foeHP = state.combat.foeHP ?? 1;
-  const round = (state.combat.rounds ?? 0) + 1;
-  const ally = state.companion && !state.combat.allyHelpUsed
-    ? ' A hunting companion is watching for an opening.'
-    : '';
-  if (announce) {
-    say(`Round ${round}: ${state.monster} — vitality ${foeHP}/${state.encounter.vitality}; your health ${state.health}/3; danger ${state.combat.pressure || 0}/${state.encounter.threat + 1}.${ally}`, 'annotation');
-  }
-  form(`What do you do against the ${state.monster}?`, 'Describe your tactic, including how you use the terrain or gear…', 'Take action', submitFight);
-}
-
-function submitFight() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
+function submitFight(session) {
+  const { state } = session;
   const moves = SPECIALTY_MOVES[state.specialty] || [];
   const tacticLabels = [...TACTICS.filter(label => label !== 'other'), ...moves, 'other'];
   const moveHelp = moves.length
     ? ` The ${state.specialty} specialty also allows: ${moves.join(', ')}.`
     : '';
-  classified({
-    text,
+  session.classified({
+    text: session.answer(),
     emptyText: 'Write an action first.',
     busyText: 'Reading your action…',
     fields: { tactic: tacticLabels },
     context: `Encounter with ${state.monster}, a ${state.encounter?.species} threat. Kind: ${state.monsterKind}. Terrain: ${state.encounter?.region}. Specialty: ${state.specialty}. Gear charges: ${state.gear}. Companion present: ${state.companion}. Current enemy vitality: ${state.combat?.foeHP}/${state.encounter?.vitality}. Current danger: ${state.combat?.pressure}. Blood has been drawn: ${!!state.combat?.bloodDrawn}. For an intelligent humanoid opponent, classify attempts to communicate, bargain, warn, or trade as negotiate. For an animal, do not classify nonverbal calming as negotiation.${moveHelp}`,
     fallbackNote: 'Choose the tactic closest to what you described.',
-    apply: ({ tactic }, spoken) => resolveCombat(spoken, tactic)
+    apply: ({ tactic }, spoken) => resolveCombat(session, spoken, tactic)
   });
 }
 
-function resolveCombat(text, tactic) {
+function resolveCombat(session, text, tactic) {
+  const { state } = session;
   const combat = state.combat;
   const enemy = state.encounter;
   if (!combat || !enemy) {
-    status('The encounter state is missing. Start a new run.');
-    unlockStep();
+    session.status('The encounter state is missing. Start a new run.');
+    session.unlock();
     return;
   }
 
-  player(text);
+  session.player(text);
   combat.rounds += 1;
   const intelligent = ['goliath', 'giant', 'dragonborn'].includes(state.monsterKind);
   const standing = state.factionStanding[enemy.species] || 0;
@@ -510,7 +226,7 @@ function resolveCombat(text, tactic) {
     state.essencesFound = [];
     state.essenceOutcome = null;
     state.loot = { materialsTaken: false, meatTaken: false, hideTaken: false };
-    announceCombat(tactic, `You choose to withdraw. ${state.monster} holds the ground; you make it back toward Keld without a body or essence.`);
+    announceCombat(session, tactic, `You choose to withdraw. ${state.monster} holds the ground; you make it back toward Keld without a body or essence.`);
     return;
   }
 
@@ -523,12 +239,11 @@ function resolveCombat(text, tactic) {
     state.essencesFound = [];
     state.essenceOutcome = null;
     state.loot = { materialsTaken: false, meatTaken: false, hideTaken: false };
-    say('The encounter resolves as a parley.', 'annotation');
-    say(`You lower your weapon and put terms between you and the ${enemy.species}. They listen. No body falls, no essence is taken, and the dispute over ${enemy.region} is left for another day.`, 'bridge');
-    divider();
-    stats(state);
-    phase = 'return';
-    startReturn();
+    session.say('The encounter resolves as a parley.', 'annotation');
+    session.say(`You lower your weapon and put terms between you and the ${enemy.species}. They listen. No body falls, no essence is taken, and the dispute over ${enemy.region} is left for another day.`, 'bridge');
+    session.divider();
+    session.stats();
+    startReturn(session);
     return;
   }
 
@@ -651,60 +366,42 @@ function resolveCombat(text, tactic) {
     description += ` You collapse, and a hunting party from Keld finds you before nightfall. ${state.monster} survives.`;
   }
 
-  announceCombat(tactic, description);
+  announceCombat(session, tactic, description);
 }
 
-function announceCombat(tactic, description) {
-  say(`The fight resolves as ${tactic}.`, 'annotation');
-  say(description, 'bridge');
-  divider();
-  stats(state);
+function announceCombat(session, tactic, description) {
+  const { state } = session;
+  session.say(`The fight resolves as ${tactic}.`, 'annotation');
+  session.say(description, 'bridge');
+  session.divider();
+  session.stats();
 
   if (state.outcome === 'victory') {
     state.loot = { materialsTaken: false, meatTaken: false, hideTaken: false };
-    phase = 'loot';
-    lootPrompt();
+    session.enter('loot');
   } else if (state.outcome === 'retreat' || state.outcome === 'collapse') {
-    phase = 'return';
-    startReturn();
+    startReturn(session);
   } else {
-    fightPrompt();
+    session.enter('fight');
   }
 }
 
-function lootPrompt(appendDescription = true) {
-  phase = 'loot';
-  if (appendDescription) {
-    const essences = state.essencesFound.length
-      ? state.essencesFound.map(essence => `${essence}-aligned`).join(', ')
-      : 'no clear essence';
-    const remains = state.monsterKind === 'wild'
-      ? ' This animal may also provide meat and hide.'
-      : ' The body may hold useful materials and evidence of its claim.';
-    const mutation = state.mutation
-      ? ` This individual carried a rare ${state.mutation} mutation.`
-      : '';
-    say(`In the remains, these essences glimmer faintly: ${essences}.${remains}${mutation} What do you do with the remains and essence?`);
-  }
-  form('Describe what you take, leave, or use.', 'Say what you take, leave, or use…', 'Handle the remains', submitLoot);
-}
-
-function submitLoot() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
-  classified({
-    text,
+function submitLoot(session) {
+  const { state } = session;
+  session.classified({
+    text: session.answer(),
     emptyText: 'Write what you do first.',
     busyText: 'Reading your action…',
     fields: { essence: ESSENCE_ACTIONS, carcass: CARCASS_ACTIONS },
     context: `After the fight, the remains of ${state.monster} contain essences aligned with ${state.essencesFound.join(', ') || 'nothing clear'}. ${state.monsterKind === 'wild' ? 'The animal can provide meat and hide.' : 'The body can provide evidence or materials.'} Character specialty: ${state.specialty}.`,
     fallbackNote: 'Choose what happens to the essence and the remains.',
-    apply: ({ essence, carcass }, spoken) => resolveLoot(spoken, essence, carcass)
+    apply: ({ essence, carcass }, spoken) => resolveLoot(session, spoken, essence, carcass)
   });
 }
 
-function resolveLoot(text, essence, carcass) {
-  player(text);
+function resolveLoot(session, text, essence, carcass) {
+  const { state } = session;
+  session.player(text);
   const types = state.essencesFound.slice();
   state.essenceOutcome = { disposition: essence, types };
 
@@ -747,67 +444,52 @@ function resolveLoot(text, essence, carcass) {
     remainsText = ' You leave the rest of the remains where they lie.';
   }
 
-  say(`The annotator reads your choice as ${essence} the essence and ${carcass} the remains.`, 'annotation');
-  say(essenceText + remainsText, 'bridge');
-  divider();
-  stats(state);
-  phase = 'return';
-  startReturn();
+  session.say(`The annotator reads your choice as ${essence} the essence and ${carcass} the remains.`, 'annotation');
+  session.say(essenceText + remainsText, 'bridge');
+  session.divider();
+  session.stats();
+  startReturn(session);
 }
 
-function startReturn() {
-  say('You turn back toward the village. The walk is slower with the weight of your choices and any wounds you carry.');
+function startReturn(session) {
+  const { state } = session;
+  session.say('You turn back toward the village. The walk is slower with the weight of your choices and any wounds you carry.');
 
   if (state.outcome === 'parley') {
-    say('You carry no body and no essence home, only the terms you spoke and the standing they may earn.', 'bridge');
+    session.say('You carry no body and no essence home, only the terms you spoke and the standing they may earn.', 'bridge');
   } else if (state.loot.meatTaken) {
-    say('You bring meat and hide back from the hunt.');
+    session.say('You bring meat and hide back from the hunt.');
   } else if (state.loot.materialsTaken) {
-    say('You bring back materials and evidence from the remains.');
+    session.say('You bring back materials and evidence from the remains.');
   } else {
-    say('You return without gathering anything from the remains.');
+    session.say('You return without gathering anything from the remains.');
   }
 
   if (state.outcome === 'collapse') {
-    say('You wake beside the hearth with the healer working over you. The hunting party brought you back before nightfall, and the healer brings you back to one measure of strength.', 'bridge');
+    session.say('You wake beside the hearth with the healer working over you. The hunting party brought you back before nightfall, and the healer brings you back to one measure of strength.', 'bridge');
     state.health = 1;
   }
 
   if (state.health < 3) {
     const injury = state.injuries.at(-1);
-    say(injury ? `Your ${injury} aches with every step.` : 'Your wounds ache with every step.');
+    session.say(injury ? `Your ${injury} aches with every step.` : 'Your wounds ache with every step.');
   }
 
   const standing = state.factionStanding[state.conflictFocus] || 0;
   if (standing > 0) {
-    say(`Word has gone ahead of you: the ${state.conflictFocus} speak of a hunter who respected their claim.`, 'bridge');
+    session.say(`Word has gone ahead of you: the ${state.conflictFocus} speak of a hunter who respected their claim.`, 'bridge');
   } else if (standing < 0) {
-    say(`Word has gone ahead of you, and it is not kind: the ${state.conflictFocus} name you a killer of their people.`, 'bridge');
+    session.say(`Word has gone ahead of you, and it is not kind: the ${state.conflictFocus} name you a killer of their people.`, 'bridge');
   }
 
-  divider();
-  stats(state);
-  phase = 'audience';
-  const conflict = state.conflictFocus || 'the contested lands';
-  say(`Word of your return reaches the central hearth. People gather around the news from ${state.direction || 'the trail'}: ${conflict} remain in conflict with the village. Who do you seek out first?`);
-  renderAudienceChoices();
+  session.divider();
+  session.stats();
+  session.enter('audience');
 }
 
-function renderAudienceChoices() {
-  phase = 'audience';
-  choices('Choose someone to speak with.', [
-    ['elder', 'The elder'],
-    ['healer', 'The healer'],
-    ['rival', 'Your rival'],
-    ['kin', 'Your family'],
-    ['hunter', 'The hunt leader'],
-    ['free', 'Someone else']
-  ], chooseAudience);
-}
-
-function chooseAudience(id) {
+function chooseAudience(session, id) {
   if (id === 'free') {
-    showAudienceNamePrompt();
+    session.enter('audience-name');
     return;
   }
   const name = {
@@ -817,29 +499,8 @@ function chooseAudience(id) {
     kin: 'your family',
     hunter: 'the hunt leader'
   }[id];
-  state.audience = name;
-  audienceScene(name);
-}
-
-function submitAudienceName() {
-  const input = document.querySelector('#answer');
-  const name = input ? input.value.trim() : '';
-  if (!name) {
-    status('Name someone first.');
-    return;
-  }
-  state.audience = name;
-  audienceScene(name);
-}
-
-function audienceScene(name, appendNarrative = true) {
-  phase = 'talk';
-  const who = name || state.audience || 'someone at the hearth';
-  if (appendNarrative) {
-    say(`You find ${who} at the hearth. Their attention settles first on what you carried home, then on your face. “Tell me what happened.”`);
-    if (state.encounter?.conflict) say(state.encounter.conflict, 'bridge');
-  }
-  form('What do you tell them?', 'Speak in your own words…', 'Tell your story', submitTalk);
+  session.state.audience = name;
+  session.enter('talk');
 }
 
 function audienceWho(value) {
@@ -853,23 +514,23 @@ function audienceWho(value) {
   return named[value] || String(value || 'Someone');
 }
 
-function submitTalk() {
-  const input = document.querySelector('#answer');
-  const text = input ? input.value.trim() : '';
-  classified({
-    text,
+function submitTalk(session) {
+  const { state } = session;
+  session.classified({
+    text: session.answer(),
     emptyText: 'Say something first.',
     busyText: 'Reading your words…',
     fields: { stance: STANCES },
     context: `Returning from a hunt. Audience: ${state.audience}. Outcome: ${state.outcome || 'unknown'}. Loot: meat=${!!state.loot.meatTaken}, materials=${!!state.loot.materialsTaken}, essence=${state.essenceOutcome?.disposition || 'none'}. Injuries: ${state.injuries.join(', ') || 'none'}.`,
     fallbackNote: 'Choose the manner closest to what you said.',
-    apply: ({ stance }, spoken) => resolveTalk(spoken, stance)
+    apply: ({ stance }, spoken) => resolveTalk(session, spoken, stance)
   });
 }
 
-function resolveTalk(text, stance) {
-  player(text);
-  say(`The annotator reads your manner as ${stance}.`, 'annotation');
+function resolveTalk(session, text, stance) {
+  const { state } = session;
+  session.player(text);
+  session.say(`The annotator reads your manner as ${stance}.`, 'annotation');
   const who = audienceWho(state.audience);
   let end;
 
@@ -904,16 +565,247 @@ function resolveTalk(text, stance) {
     end += ` The ${state.conflictFocus} will not forget what you did on that trail.`;
   }
 
-  say(end, 'end');
-  divider();
-  renderEnd();
+  session.say(end, 'end');
+  session.divider();
+  session.enter('end');
 }
 
-function renderEnd() {
-  phase = 'end';
-  composer.innerHTML = '<button class="primary" id="restart" type="button">Play again</button>';
-  const restart = document.querySelector('#restart');
-  restart.onclick = () => begin(randomSeed());
-  restart.focus();
-  saveProgress();
+// ---------------------------------------------------------------------------
+// Phase hooks, keyed by phase id. `enter` may write narration and must render
+// a prompt. `restoring` is true when the transcript already holds the scene.
+
+export const steps = {
+  gender: {
+    enter(session) {
+      session.form(
+        'How do you describe your gender?',
+        'Use your own words, or leave blank…',
+        'Continue',
+        () => {
+          const spoken = session.answer();
+          session.state.gender = spoken || 'unspecified';
+          if (spoken) session.player(spoken);
+          else session.say('You leave the question unanswered.', 'bridge');
+          session.enter('specialty');
+        }
+      );
+    }
+  },
+
+  specialty: {
+    enter(session, { restoring }) {
+      if (!restoring) {
+        session.say('The hearth-keeper turns a carved token in her palm. “What are you known for among your people?”');
+      }
+      session.form(
+        'Describe your specialty in your own words.',
+        'A knack, practice, reputation, or way of seeing…',
+        'Continue',
+        () => {
+          session.classified({
+            text: session.answer(),
+            emptyText: 'Write a response first.',
+            busyText: 'Reading your description…',
+            fields: { specialty: SPECIALTIES },
+            context: 'Character creation. Map a freeform self-description to the closest practical specialty.',
+            fallbackNote: 'Choose the specialty closest to what you described.',
+            apply: ({ specialty }, spoken) => {
+              const { state } = session;
+              state.specialty = specialty;
+              state.specialtyText = spoken;
+              session.player(spoken);
+              session.say(`The hearth-keeper records you as ${specialty}.`, 'annotation');
+              session.divider();
+              startHunt(session);
+            }
+          });
+        }
+      );
+    }
+  },
+
+  hunt: {
+    enter(session) {
+      session.form(
+        'What do you do?',
+        'Describe your preparation and departure…',
+        'Set out',
+        () => {
+          session.classified({
+            text: session.answer(),
+            emptyText: 'Write an action first.',
+            busyText: 'Reading your action…',
+            fields: { approach: APPROACHES },
+            context: 'You are setting out from Keld to hunt. Identify the main approach.',
+            fallbackNote: 'Choose the approach closest to what you described.',
+            apply: ({ approach }, spoken) => {
+              const { state } = session;
+              session.player(spoken);
+              state.gear = approach === 'prepare' ? 2 : approach === 'ask_for_help' ? 1 : 0;
+              state.companion = approach === 'ask_for_help';
+              const detail = state.companion
+                ? ' with a Keld hunter who agreed to come'
+                : approach === 'prepare'
+                  ? ' with two pieces of useful hunting gear'
+                  : approach === 'leave_quickly'
+                    ? ' before gathering extra gear'
+                    : '';
+              session.say(`You set out${detail}.`, 'bridge');
+              session.stats();
+              session.divider();
+              startDirection(session);
+            }
+          });
+        }
+      );
+    }
+  },
+
+  direction: {
+    enter(session, { restoring }) {
+      if (!restoring) {
+        session.say('Five trails leave Keld: north into the Graycap Range; northwest through Giant’s Pass; east along the Birchway; south onto the Mammoth Grounds; southwest into Direwolf Wood. Each route is distinct. Where do you go?');
+      }
+      session.form(
+        'Where do you travel, and why?',
+        'Name north, northwest, east, south, or southwest…',
+        'Follow the trail',
+        () => submitDirection(session)
+      );
+    }
+  },
+
+  beat: {
+    enter(session) {
+      const beat = DIRECTIONS[session.state.direction]?.beat;
+      if (!beat) {
+        session.enter('fight');
+        return;
+      }
+      session.form(
+        beat.prompt,
+        'Describe what you do before the fight…',
+        'Close in',
+        () => submitBeat(session)
+      );
+    }
+  },
+
+  fight: {
+    enter(session, { restoring }) {
+      const { state } = session;
+      if (!state.combat || !state.encounter) {
+        session.status('The encounter state is missing. Start a new run.');
+        return;
+      }
+      const foeHP = state.combat.foeHP ?? 1;
+      const round = (state.combat.rounds ?? 0) + 1;
+      const ally = state.companion && !state.combat.allyHelpUsed
+        ? ' A hunting companion is watching for an opening.'
+        : '';
+      if (!restoring) {
+        session.say(`Round ${round}: ${state.monster} — vitality ${foeHP}/${state.encounter.vitality}; your health ${state.health}/3; danger ${state.combat.pressure || 0}/${state.encounter.threat + 1}.${ally}`, 'annotation');
+      }
+      session.form(
+        `What do you do against the ${state.monster}?`,
+        'Describe your tactic, including how you use the terrain or gear…',
+        'Take action',
+        () => submitFight(session)
+      );
+    }
+  },
+
+  loot: {
+    enter(session, { restoring }) {
+      const { state } = session;
+      if (!restoring) {
+        const essences = state.essencesFound.length
+          ? state.essencesFound.map(essence => `${essence}-aligned`).join(', ')
+          : 'no clear essence';
+        const remains = state.monsterKind === 'wild'
+          ? ' This animal may also provide meat and hide.'
+          : ' The body may hold useful materials and evidence of its claim.';
+        const mutation = state.mutation
+          ? ` This individual carried a rare ${state.mutation} mutation.`
+          : '';
+        session.say(`In the remains, these essences glimmer faintly: ${essences}.${remains}${mutation} What do you do with the remains and essence?`);
+      }
+      session.form(
+        'Describe what you take, leave, or use.',
+        'Say what you take, leave, or use…',
+        'Handle the remains',
+        () => submitLoot(session)
+      );
+    }
+  },
+
+  audience: {
+    enter(session, { restoring }) {
+      const { state } = session;
+      if (!restoring) {
+        const conflict = state.conflictFocus || 'the contested lands';
+        session.say(`Word of your return reaches the central hearth. People gather around the news from ${state.direction || 'the trail'}: ${conflict} remain in conflict with the village. Who do you seek out first?`);
+      }
+      session.choices('Choose someone to speak with.', [
+        ['elder', 'The elder'],
+        ['healer', 'The healer'],
+        ['rival', 'Your rival'],
+        ['kin', 'Your family'],
+        ['hunter', 'The hunt leader'],
+        ['free', 'Someone else']
+      ], id => chooseAudience(session, id));
+    }
+  },
+
+  'audience-name': {
+    enter(session) {
+      session.form(
+        'Who do you seek out?',
+        'Name the person or describe them…',
+        'Find them',
+        () => {
+          const name = session.answer();
+          if (!name) {
+            session.status('Name someone first.');
+            return;
+          }
+          session.state.audience = name;
+          session.enter('talk');
+        }
+      );
+    }
+  },
+
+  talk: {
+    enter(session, { restoring }) {
+      const { state } = session;
+      const who = state.audience || 'someone at the hearth';
+      if (!restoring) {
+        session.say(`You find ${who} at the hearth. Their attention settles first on what you carried home, then on your face. “Tell me what happened.”`);
+        if (state.encounter?.conflict) session.say(state.encounter.conflict, 'bridge');
+      }
+      session.form(
+        'What do you tell them?',
+        'Speak in your own words…',
+        'Tell your story',
+        () => submitTalk(session)
+      );
+    }
+  },
+
+  end: {
+    enter(session) {
+      session.endButton('Play again', () => session.begin());
+    }
+  }
+};
+
+function startHunt(session) {
+  session.stats();
+  session.say('At first light you shoulder your hunting gear. Keld needs meat, and the elders expect you to return with more than a story. What do you do to prepare and set out?');
+  session.enter('hunt');
+}
+
+function startDirection(session) {
+  session.enter('direction');
 }

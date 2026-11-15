@@ -3,9 +3,35 @@
 The prototype’s core bet is sound: **treat freeform language as intent, then resolve outcomes with deterministic rules.**
 The next iterations should deepen that bet rather than replace it with prose generation.
 
-Current state: third iteration (`v0.3`), single-encounter arc with an approach beat per route, five fixed routes,
-one deterministic combat system, two specialty moves, local demo classifier plus six hosted/typed adapters, and a
-browser smoke suite.
+Current state: fourth iteration (`v0.4`), a story-agnostic engine plus a pluggable Frostmarch story module. Single
+encounter arc with an approach beat per route, five fixed routes, one deterministic combat system, two specialty
+moves, local demo classifier plus six hosted/typed adapters, and two browser suites.
+
+---
+
+## Shipped in v0.4 — engine and story modules
+
+### Structure
+
+- **`src/engine/` is the medium and imports no setting.** It owns the phase driver (`session.js`), transcript model,
+  save envelope and legacy migrations, classifier adapters, provider presets, seeded RNG, and pure helpers. A story
+  only supplies data and phase hooks.
+- **`src/stories/frostmarch/` is the first story module.** `content.js` holds routes, scenes, closed label sets,
+  demo keywords, and display text; `state.js` holds the state shape and v1 migration; `steps.js` holds every phase
+  hook and consequence; `index.js` is the module the engine loads.
+- **One import switches stories.** `src/main.js` imports `./stories/frostmarch/index.js` and nothing else in the
+  engine or UI knows the setting.
+- **The story contract is documented** in `src/stories/README.md`: module fields, the `session` API, the classified
+  step shape, and the replayable-`enter` rule.
+- **UI is generic.** `ui.js` renders `[[label, value], ...]` stat rows and label maps supplied by the story instead
+  of importing Frostmarch constants.
+
+### Testing
+
+- `tests/engine.html` + `tests/engine.js`: 5 engine-level tests that boot `tests/fixture-story.js`, a five-phase
+  story with no Frostmarch imports. They cover text prompts, classified prompts with the manual fallback, choices,
+  stat hiding/showing, the end button, and save/restore.
+- `tests/smoke.html` still passes all 12 Frostmarch tests unchanged after the extraction.
 
 ---
 
@@ -100,12 +126,13 @@ browser smoke suite.
 
 | Gap | Why it matters | Suggested fix |
 | --- | --- | --- |
-| No unit tests | Rules changes are still guarded by a hand-started browser suite, not CI | Extract pure `resolveCombatAction(state, tactic, enemy)` and table-test the tactic/threat/specialty matrix |
+| No pure-function unit tests or CI | Rules changes are guarded by two hand-started browser suites | Extract `resolveCombatAction(state, tactic, enemy)` and table-test the tactic/threat/specialty matrix |
 | Only one encounter per run | The arc resolves after one beat and one fight; routes still share a shape | Add a second encounter or a fork on one route first, as a template |
 | `leader` has no perk | One specialty is still a label without mechanics | Rally once per fight: negate pressure, owe a favour with a social cost |
 | Gear dominates preparation | Two 2-damage openers can end most fights | Give speed/ally/social trade-offs, or make gear situational |
 | Direction parser ignores negation | “I don’t go south” routes south | Prefer the classifier when negation is present, or always confirm regex matches |
 | Standing does not persist across runs | The faction ledger resets with each new run | Cross-run ledger in local storage or a village hub |
+| Page shell is Frostmarch-specific | A second story still needs masthead/map edits in `index.html` | Move page copy into a story-provided shell config or add a story switcher |
 
 ### Medium value
 
@@ -128,7 +155,7 @@ browser smoke suite.
 
 ---
 
-## v0.4 — Depth, continued
+## v0.5 — Depth, continued
 
 Goal: make each route a short chain rather than one beat and one gate.
 
@@ -160,14 +187,16 @@ Goal: make each route a short chain rather than one beat and one gate.
 ### Engineering
 
 - Extract a pure `resolveCombatAction(state, tactic, enemy)` and table-test the tactic/threat/specialty matrix. The
-  browser smoke suite stays as the integration layer.
+  browser suites stay as the integration layer.
 - Add a content schema check at boot (route fields, beat option effects, label arrays, preset shapes).
 - Add structured run history (`runId`, seed, outcome, route, choices) without changing the active save format.
 - Add an export/import run JSON action.
+- Decide what belongs in the medium next: combat/duel math, the audience ritual, and the loot model are candidates
+  for reusable mechanics that a second story could import.
 
 ---
 
-## v0.5 — World
+## v0.6 — World
 
 Goal: make Keld a place that remembers.
 
@@ -209,8 +238,10 @@ Goal: make Keld a place that remembers.
 
 If only one more increment fits:
 
-1. Add one more beat to a single route (east is the simplest) so the chain shape is proven before repeating it.
-2. Implement the `leader` move (`rally`) and assert it in the smoke suite.
-3. Extract combat resolution into a pure function and add table tests for the tactic/threat/specialty matrix.
-4. Make the direction parser negation-aware, or always confirm regex matches with the route buttons.
-5. Add a non-lethal ending per route (drive off, recover the goods, leave the herd) keyed to the beat choice.
+1. Add a second real (small) story module and switch `main.js` to it, to prove the plug-in boundary and expose the
+   page-shell coupling. A three-phase story is enough.
+2. Move the duel math into a reusable mechanic module with a pure `resolveCombatAction(state, tactic, enemy)` and
+   table tests, so another story can import combat instead of copying it.
+3. Add a content schema check at boot for story fields, step hooks, and label arrays.
+4. Implement the `leader` move (`rally`) and assert it in the smoke suite.
+5. Make the direction parser negation-aware, or always confirm regex matches with the route buttons.

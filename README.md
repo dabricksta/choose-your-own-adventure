@@ -4,6 +4,10 @@ A single-setting, browser-only interactive fiction prototype set in the Frostmar
 does in your own words; a classifier maps that intent onto a small closed set of labels, and deterministic JavaScript
 resolves the consequences.
 
+The code is split in two: `src/engine/` is a story-agnostic medium (phases, prompts, classifier adapters, saves,
+seeded randomness, transcript), and `src/stories/frostmarch/` is one pluggable story module. The engine never imports
+a setting; a story never touches the DOM.
+
 The design rule is deliberate:
 
 > **The model classifies. The game rules resolve.** The model never writes prose, invents facts, or decides success.
@@ -40,13 +44,22 @@ No dependencies, no build step, no package manager required.
 | --- | --- |
 | `index.html` | Page shell: masthead, map, provider panel, transcript, composer |
 | `styles.css` | Paper-and-ink theme, dark mode, fallback controls |
-| `src/content.js` | Routes, encounters, label sets, provider presets, display text |
-| `src/state.js` | Seeded RNG, state defaults/validation, save and migration |
-| `src/classify.js` | Demo keyword classifier, explicit-direction parser, provider adapters |
-| `src/ui.js` | DOM rendering: transcript, forms, stats, manual fallback panel |
-| `src/game.js` | Game flow, combat resolution, loot, audience, endings |
-| `src/main.js` | Boot, provider settings, save/replay controls |
-| `tests/smoke.html` | Browser smoke suite that drives the real game in an iframe |
+| `src/engine/session.js` | Phase driver, prompts, classified steps, save/restore |
+| `src/engine/transcript.js` | Durable log model; the UI subscribes and draws |
+| `src/engine/save.js` | Save envelope, seed, log sanitising, legacy migrations |
+| `src/engine/classify.js` | Provider adapters and the generic demo keyword classifier |
+| `src/engine/providers.js` | Provider presets |
+| `src/engine/rng.js` | Seeded randomness |
+| `src/engine/util.js` | Small pure helpers |
+| `src/stories/frostmarch/content.js` | Routes, encounters, label sets, demo keywords, display text |
+| `src/stories/frostmarch/state.js` | Frostmarch state shape, validation, v1 migration |
+| `src/stories/frostmarch/steps.js` | Every Frostmarch phase hook and consequence |
+| `src/stories/frostmarch/index.js` | The story module the engine loads |
+| `src/stories/README.md` | The story-module contract |
+| `src/ui.js` | DOM rendering: transcript, forms, stats rows, manual fallback panel |
+| `src/main.js` | Boot, provider settings, save/replay controls, active story import |
+| `tests/smoke.html` | Browser smoke suite that drives the real Frostmarch game in an iframe |
+| `tests/engine.html` | Engine suite driving a fixture story that is not Frostmarch |
 | `serve.py` | No-cache local development server |
 | `frostmarch-realm-map.svg` | Hand-authored realm map |
 | `initiates-hunt-prototype.html` | Redirect kept for old bookmarks |
@@ -82,6 +95,26 @@ Two specialties carry a combat move of their own:
 
 The move appears as an extra tactic label only for the matching specialty, and the manual fallback panel offers
 the same labels.
+
+### Engine and stories
+
+The medium and the setting are separate on disk and in imports:
+
+- **`src/engine/`** owns the phase machine, prompt rendering, the classifier
+  seam, seeded randomness, save envelopes, log sanitising, and restore. It has no
+  setting text and no story imports.
+- **`src/stories/frostmarch/`** owns the routes, scenes, label sets, state shape,
+  and every consequence. It has no DOM access and no provider code.
+- **`src/ui.js`** draws what the engine gives it: transcript entries, prompts,
+  choices, and `[[label, value], ...]` stat rows chosen by the story.
+
+A story is a folder with an `index.js`, `content.js`, `state.js`, and `steps.js`.
+Swapping it is one import in `src/main.js`. The full contract, including the
+`session` API and classified-step shape, is in
+[`src/stories/README.md`](src/stories/README.md).
+
+`tests/engine.html` runs a five-phase fixture story with no Frostmarch imports,
+which is the practical check that the boundary has not leaked.
 
 ### Controls
 
@@ -131,14 +164,19 @@ the allowed set before the rules engine sees it.
 
 ### Adding a route
 
-Route content lives in `DIRECTIONS` in `src/content.js`. A route needs a name, region, species, monster, kind,
-vitality, threat, essences, a conflict paragraph, and a scene paragraph. Add the route label to the prompt/fallback
-sets if you introduce a new direction name.
+Route content lives in `DIRECTIONS` in `src/stories/frostmarch/content.js`. A route needs a name, region, species,
+monster, kind, vitality, threat, essences, a conflict paragraph, a scene paragraph, and a beat. Add the route label to
+the prompt/fallback sets if you introduce a new direction name.
 
 ### Changing the rules
 
-All consequences are in `src/game.js`: `resolveBeat`, `resolveCombat`, `resolveLoot`, `startReturn`, and `resolveTalk`. The
-classifier only returns labels; it cannot change numbers.
+All Frostmarch consequences are in `src/stories/frostmarch/steps.js`: `resolveBeat`, `resolveCombat`, `resolveLoot`,
+`startReturn`, and `resolveTalk`. The classifier only returns labels; it cannot change numbers.
+
+### Adding a story
+
+Copy `src/stories/frostmarch/`, replace its content/state/steps, and change the import in `src/main.js`. Keep
+`src/engine/` untouched. See [`src/stories/README.md`](src/stories/README.md) for the module and session contracts.
 
 ### Debugging
 
@@ -150,20 +188,27 @@ __frostmarch.begin(seed)    // start a specific seed
 __frostmarch.saveProgress() // force a save
 ```
 
-### Manual test checklist
+### Test checklist
 
-The browser smoke suite is the first line of defense:
+The browser suites are the first line of defense:
 
 ```sh
 python serve.py
 ```
 
-Then open <http://127.0.0.1:8000/tests/smoke.html>. It drives the real game in an iframe and asserts on outcomes,
-loot, faction standing, specialty moves, save restore, and disclosure alignment. All 12 tests should pass; the page
-title reads `PASS — smoke tests`. The suite snapshots your save file first and restores it afterwards, but it does
-play real runs in the iframe while it works, so avoid running it in the same browser profile as a run you care about.
+Then open:
 
-It is not wired into CI (there is no build step or package manager). Before a release, also check by hand:
+- <http://127.0.0.1:8000/tests/smoke.html> — 12 story-level tests that drive the real game in an iframe and assert
+  on outcomes, loot, faction standing, specialty moves, save restore, and disclosure alignment. The title should read
+  `PASS — smoke tests`.
+- <http://127.0.0.1:8000/tests/engine.html> — 5 engine-level tests that boot a fixture story with no Frostmarch
+  imports and exercise prompts, the manual fallback, choices, stats, and save/restore. The title should read
+  `PASS — engine tests`. One logged provider error is expected: that test deliberately fails the classifier once.
+
+Both suites play real runs in the page while they work, but the smoke suite snapshots your save file first and
+restores it afterwards. Avoid running them in the same browser profile as a run you care about.
+
+They are not wired into CI (there is no build step or package manager). Before a release, also check by hand:
 
 1. A full run in Local demo with each route.
 2. A hosted provider with a real key, and a failing provider to confirm the manual fallback panel.
@@ -178,7 +223,9 @@ It is not wired into CI (there is no build step or package manager). Before a re
 - Only one encounter per run. The approach beat adds a scene, not a second encounter chain.
 - `leader` still has no mechanical perk. `enduring` and `healer` do.
 - Faction standing persists only inside a run’s save; there is no cross-run ledger yet.
-- No automated unit tests and no CI; the smoke suite is browser-driven and hand-started.
+- The engine suites are browser-driven and hand-started; there is no CI and no unit-test runner.
+- The page shell (`index.html`) still carries Frostmarch masthead copy and the fixed realm map, so a second story
+  needs a small shell change or a story switcher.
 - No i18n; no content warnings beyond the setting description.
 
 ---
@@ -192,5 +239,5 @@ paths are relative. The map and styles load from the same folder.
 
 ## Status
 
-Prototype, third iteration. See [ROADMAP.md](ROADMAP.md) for the prioritized next steps and
+Prototype, fourth iteration. See [ROADMAP.md](ROADMAP.md) for the prioritized next steps and
 [CHANGELOG.md](CHANGELOG.md) for what changed.

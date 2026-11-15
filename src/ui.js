@@ -1,18 +1,25 @@
-// DOM rendering helpers. This module knows nothing about the game rules.
+// DOM rendering for the engine. It draws the transcript, prompts, choices,
+// stats rows, and the manual classifier fallback. It knows nothing about any
+// particular story: labels and stat rows arrive from the story module.
 
-import { FIELD_LABELS, LABEL_TEXT, LOG_CLASSES } from './content.js';
+import { LOG_CLASSES } from './engine/transcript.js';
 
-export const transcript = document.querySelector('#transcript');
+export const transcriptEl = document.querySelector('#transcript');
 export const composer = document.querySelector('#composer');
 export const statsEl = document.querySelector('#stats');
 export const seedEl = document.querySelector('#run-seed');
 export const saveNote = document.querySelector('#save-note');
 export const resumeBtn = document.querySelector('#resume-run');
 
-export const transcriptLog = [];
-
 let saveHandler = () => {};
 let scheduleHandler = () => {};
+let labelMap = {};
+let fieldLabels = {};
+
+export function configure({ labelText = {}, fields = {} } = {}) {
+  labelMap = labelText || {};
+  fieldLabels = fields || {};
+}
 
 export function setPersistence({ save, schedule }) {
   if (typeof save === 'function') saveHandler = save;
@@ -33,60 +40,35 @@ export function fail(error) {
   return error?.message || 'Could not read that action. Check the provider settings and retry.';
 }
 
+function defaultLabelText(label) {
+  return String(label).replaceAll('_', ' ').replace(/^\w/, character => character.toUpperCase());
+}
+
 function labelText(label) {
-  return LABEL_TEXT[label] || String(label).replaceAll('_', ' ').replace(/^\w/, character => character.toUpperCase());
+  return labelMap[label] || defaultLabelText(label);
 }
 
 function renderEntry(entry) {
   if (entry.kind === 'hr') {
-    transcript.appendChild(document.createElement('hr'));
+    transcriptEl.appendChild(document.createElement('hr'));
     return;
   }
   const paragraph = document.createElement('p');
   paragraph.className = LOG_CLASSES.has(entry.cls) ? entry.cls : 'scene';
   paragraph.textContent = entry.text;
-  transcript.appendChild(paragraph);
+  transcriptEl.appendChild(paragraph);
 }
 
-export function say(text, cls = 'scene') {
-  const entry = {
-    kind: 'say',
-    text: String(text),
-    cls: LOG_CLASSES.has(cls) ? cls : 'scene'
-  };
-  transcriptLog.push(entry);
-  renderEntry(entry);
-}
-
-export function divider() {
-  const entry = { kind: 'hr' };
-  transcriptLog.push(entry);
-  renderEntry(entry);
-}
-
-export function resetTranscript() {
-  transcriptLog.length = 0;
-  transcript.innerHTML = '';
-}
-
-export function renderLog(entries) {
-  resetTranscript();
-  for (const entry of entries) {
-    if (!entry || typeof entry !== 'object') continue;
-    if (entry.kind === 'hr') {
-      const clean = { kind: 'hr' };
-      transcriptLog.push(clean);
-      renderEntry(clean);
-    } else if (entry.kind === 'say' && typeof entry.text === 'string') {
-      const clean = {
-        kind: 'say',
-        text: entry.text,
-        cls: LOG_CLASSES.has(entry.cls) ? entry.cls : 'scene'
-      };
-      transcriptLog.push(clean);
-      renderEntry(clean);
+// Attach the DOM to a transcript model. Returns an unsubscribe function.
+export function bindTranscript(transcript) {
+  return transcript.subscribe((type, payload) => {
+    if (type === 'append') {
+      renderEntry(payload);
+    } else if (type === 'replace') {
+      transcriptEl.innerHTML = '';
+      for (const entry of payload) renderEntry(entry);
     }
-  }
+  });
 }
 
 export function status(message) {
@@ -102,34 +84,28 @@ export function setResumeEnabled(enabled) {
   if (resumeBtn) resumeBtn.disabled = !enabled;
 }
 
-export function stats(state) {
+export function setSeed(value) {
+  if (seedEl) seedEl.value = value || '';
+}
+
+export function answerElement() {
+  return document.querySelector('#answer');
+}
+
+export function answerValue() {
+  return answerElement()?.value || '';
+}
+
+// rows: [[label, value], ...] chosen by the story.
+export function renderStats(rows) {
   statsEl.hidden = false;
-  const disposition = {
-    keep: 'kept',
-    consume: 'consumed',
-    offer: 'offered',
-    destroy: 'destroyed',
-    leave: 'left',
-    other: 'unresolved'
-  }[state.essenceOutcome?.disposition] || state.essenceOutcome?.disposition;
-  const essence = state.essenceOutcome
-    ? `${disposition}${state.essenceOutcome.types.length ? ` (${state.essenceOutcome.types.join(', ')})` : ''}`
-    : 'none';
-  const factions = Object.entries(state.factionStanding || {})
-    .filter(([, amount]) => amount)
-    .map(([name, amount]) => `${name} ${amount > 0 ? '+' : ''}${amount}`)
-    .join(', ');
-  const pack = [...state.inventory.essences, ...state.inventory.materials].join(', ');
-  statsEl.innerHTML = [
-    `<span>specialty: ${safe(state.specialty)}</span>`,
-    `<span>health: ${state.health}/3</span>`,
-    `<span>injuries: ${state.injuries.length ? state.injuries.map(item => safe(item)).join(', ') : 'none'}</span>`,
-    `<span>gear: ${state.gear}</span>`,
-    `<span>essence: ${safe(essence)}</span>`,
-    `<span>reputation: ${state.reputation}</span>`,
-    factions ? `<span>factions: ${safe(factions)}</span>` : '',
-    pack ? `<span>pack: ${safe(pack)}</span>` : ''
-  ].join('');
+  statsEl.innerHTML = rows
+    .map(([label, value]) => `<span>${safe(label)}: ${safe(value)}</span>`)
+    .join('');
+}
+
+export function hideStats() {
+  statsEl.hidden = true;
 }
 
 export function form(label, placeholder, submitText, handler) {
@@ -163,6 +139,15 @@ export function choices(label, items, handler) {
   composer.querySelector('button')?.focus();
 }
 
+export function singleButton(label, handler) {
+  clearFallback();
+  composer.innerHTML = `<button class="primary" id="restart" type="button">${safe(label)}</button>`;
+  const button = composer.querySelector('#restart');
+  button.onclick = handler;
+  saveHandler();
+  button.focus();
+}
+
 export function lockStep(busyText = 'Reading your action…') {
   const input = document.querySelector('#answer');
   const go = document.querySelector('#go');
@@ -193,7 +178,7 @@ export function renderFallback(step, note, defaults, retry) {
       const active = selected[field] === label ? ' active' : '';
       return `<button type="button" class="chip${active}" data-field="${safe(field)}" data-label="${safe(label)}">${safe(labelText(label))}</button>`;
     }).join('');
-    return `<div class="fallback-group"><span class="label">${safe(FIELD_LABELS[field] || field)}</span><div class="row">${chips}</div></div>`;
+    return `<div class="fallback-group"><span class="label">${safe(fieldLabels[field] || field)}</span><div class="row">${chips}</div></div>`;
   }).join('');
 
   const box = document.createElement('div');

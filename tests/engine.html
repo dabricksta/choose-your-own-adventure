@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Engine tests — story module seam</title>
+  <link rel="stylesheet" href="../styles.css">
+  <style>
+    body { padding: 1.5rem; }
+    #transcript { min-height: 4rem; }
+    .engine-shell { max-width: 560px; margin: 0 auto 1rem; }
+  </style>
+</head>
+
+<body>
+  <main class="wrap">
+    <header class="masthead">
+      <h1>Engine fixture</h1>
+      <p class="note">A story module with no Frostmarch imports. If this runs, the engine is the medium.</p>
+    </header>
+
+    <div class="run-controls">
+      <label for="run-seed">Seed <input id="run-seed" autocomplete="off"></label>
+      <button id="resume-run" type="button">Resume</button>
+      <p class="save-note" id="save-note" aria-live="polite"></p>
+    </div>
+
+    <div id="transcript" role="log" aria-live="polite"></div>
+    <div id="stats" class="stats" aria-live="polite" hidden></div>
+    <div id="composer"></div>
+
+    <section id="results" aria-live="polite"></section>
+  </main>
+
+  <script type="module" src="engine.js"></script>
+</body>
+
+</html>

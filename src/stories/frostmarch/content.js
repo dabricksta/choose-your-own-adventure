@@ -1,11 +1,7 @@
-// Static content and constants for The Initiate's Hunt.
-// Everything a model may classify lives here as a closed label set.
-
-export const SAVE_KEY = 'frostmarch-hunt-save-v2';
-export const LEGACY_SAVE_KEY = 'frostmarch-hunt-save-v1';
-export const SAVE_VERSION = 2;
-export const MAX_LOG_ENTRIES = 600;
-export const CLASSIFIER_TIMEOUT_MS = 45000;
+// Frostmarch content. Everything a model may classify lives here as a closed
+// label set, and every label the manual fallback can offer is named here.
+//
+// This file is content and data only. Consequences live in steps.js.
 
 export const SPECIALTIES = [
   'strong', 'quick', 'enduring', 'observant', 'cunning', 'healer', 'tracker', 'leader', 'other'
@@ -21,6 +17,7 @@ export const SPECIALTY_MOVES = {
   enduring: ['endure'],
   healer: ['mend']
 };
+
 export const ESSENCE_ACTIONS = ['keep', 'consume', 'offer', 'destroy', 'leave', 'other'];
 export const CARCASS_ACTIONS = ['harvest', 'leave', 'other'];
 export const STANCES = ['truthful', 'boastful', 'guarded', 'apologetic', 'other'];
@@ -28,12 +25,10 @@ export const STANCES = ['truthful', 'boastful', 'guarded', 'apologetic', 'other'
 export const MONSTER_KINDS = ['goliath', 'giant', 'dragonborn', 'wild'];
 export const OUTCOMES = ['victory', 'retreat', 'collapse', 'parley'];
 
-export const PHASES = new Set([
+export const PHASES = [
   'gender', 'specialty', 'hunt', 'direction', 'beat', 'fight', 'loot',
   'audience', 'audience-name', 'talk', 'end'
-]);
-
-export const LOG_CLASSES = new Set(['scene', 'scene player', 'annotation', 'bridge', 'end']);
+];
 
 export const DIRECTIONS = {
   north: {
@@ -207,43 +202,83 @@ export const ROUTES = Object.keys(DIRECTIONS);
 
 export const WILD_MUTATIONS = ['stone', 'fire', 'lightning', 'shadow', 'venom', 'regrowth'];
 
-export const PROVIDER_PRESETS = {
-  demo: {
-    model: 'local-demo',
-    endpoint: '',
-    help: 'Demo mode classifies locally with simple keyword rules. It needs no model account and sends no text anywhere.'
-  },
-  'claude-app': {
-    model: 'Claude (in-app)',
-    endpoint: '',
-    help: 'Uses the host app’s Claude integration. This depends on app-session access and may use Claude quota.'
-  },
-  anthropic: {
-    model: 'claude-haiku-5-5',
-    endpoint: 'https://api.anthropic.com/v1/messages',
-    help: 'Calls Anthropic directly with your API key. The key stays in this tab; browser CORS or account settings may prevent direct calls.'
-  },
-  openai: {
-    model: 'gpt-4o-mini',
-    endpoint: 'https://api.openai.com/v1',
-    help: 'Calls OpenAI’s chat completions API with your key. The key stays in this tab.'
-  },
-  qwen: {
-    model: 'qwen-plus',
-    endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-    help: 'Calls Qwen’s OpenAI-compatible endpoint. Change the endpoint for your region if needed.'
-  },
-  local: {
-    model: 'qwen2.5:7b-instruct',
-    endpoint: 'http://localhost:11434/v1',
-    help: 'OpenAI-compatible local endpoint (for example Ollama at localhost:11434/v1 or LM Studio at localhost:1234/v1). CORS must allow this page origin.'
-  },
-  jev: {
-    model: 'jev-latest',
-    endpoint: 'https://api.typesafe.ai',
-    help: 'Uses Jev’s typed choice API. Supply a TypeSafe API key. Jev classifies choices; local code resolves story consequences.'
-  }
+// Demo-mode keyword rules, keyed by the closed field name. The engine's
+// keyword classifier is generic; these words are this story's.
+export const DEMO_RULES = {
+  specialty: [
+    ['strong', ['strong', 'strength', 'lift', 'power', 'muscle', 'muscular']],
+    ['quick', ['quick', 'fast', 'speed', 'agile', 'agility']],
+    ['enduring', ['endure', 'enduring', 'stamina', 'cold', 'long']],
+    ['healer', ['heal', 'healer', 'healing', 'medicine', 'herb', 'herbs', 'wound', 'wounds']],
+    ['tracker', ['track', 'tracks', 'tracking', 'trail', 'trails', 'scout', 'scouting', 'sign', 'signs']],
+    ['cunning', ['clever', 'cunning', 'trap', 'traps', 'trick', 'tricks', 'plan', 'plans']],
+    ['leader', ['lead', 'leader', 'leading', 'organize', 'people', 'persuade', 'persuasion']],
+    ['observant', ['observe', 'observant', 'notice', 'watch', 'see', 'perceive', 'perceptive', 'aware']]
+  ],
+  approach: [
+    ['ask_for_help', ['help', 'companion', 'party', 'invite', 'hunter', 'come with me', 'with me', 'join me']],
+    ['prepare', ['prepare', 'pack', 'gear', 'food', 'map', 'weapon']],
+    ['leave_quickly', ['leave now', 'rush', 'quickly', 'without']]
+  ],
+  direction: [
+    ['northwest', ['northwest', "giant's pass", 'frost giant']],
+    ['north', ['north', 'graycap', 'mountain']],
+    ['east', ['east', 'birchway', 'rimewood']],
+    ['southwest', ['southwest', 'direwolf wood', 'direwolf']],
+    ['south', ['south', 'mammoth grounds', 'mammoth']]
+  ],
+  tactic: [
+    ['retreat', ['retreat', 'run away', 'flee', 'withdraw', 'escape']],
+    ['mend', ['bind', 'bandage', 'treat', 'mend', 'heal', 'herb', 'herbs', 'salve', 'patch', 'stop the bleeding']],
+    ['endure', ['brace', 'endure', 'grit', 'stand firm', 'weather the', 'take the blow', 'set my feet', 'dig in']],
+    ['negotiate', ['talk', 'trade', 'parley', 'negotiate', 'offer terms', 'promise']],
+    ['use_gear', ['gear', 'weapon', 'rope', 'spear', 'knife', 'bow']],
+    ['use_environment', ['tree', 'rock', 'ice', 'terrain', 'fire', 'trap']],
+    ['evade', ['dodge', 'evade', 'avoid', 'duck', 'circle']],
+    ['attack', ['attack', 'strike', 'stab', 'shoot', 'hit', 'fight']]
+  ],
+  beat: [
+    ['clever', ['snare', 'cut the', 'pry', 'sample', 'pull', 'spill', 'lashings', 'strongbox', 'pocket', 'sabotage']],
+    ['careful', ['study', 'watch', 'observe', 'read', 'circle', 'wait', 'follow', 'downwind', 'upwind', 'climb', 'count', 'mark', 'shadow', 'keep to']],
+    ['bold', ['charge', 'rush', 'run at', 'close', 'drive', 'break', 'meet', 'straight at', 'head-on']]
+  ],
+  essence: [
+    ['consume', ['eat', 'drink', 'consume', 'swallow', 'absorb']],
+    ['offer', ['offer', 'give', 'gift']],
+    ['destroy', ['destroy', 'burn', 'smash', 'break']],
+    ['keep', ['keep', 'pocket', 'carry', 'save', 'take']],
+    ['leave', ['leave', 'abandon', 'discard']]
+  ],
+  carcass: [
+    ['harvest', ['harvest', 'butcher', 'skin', 'cut up', 'take meat']],
+    ['leave', ['leave', 'abandon', 'bury']]
+  ],
+  stance: [
+    ['boastful', ['greatest', 'best hunter', 'boast', 'brag']],
+    ['apologetic', ['sorry', 'apologize', 'regret', 'fault']],
+    ['guarded', ['secret', 'hide', "won't say"]],
+    ['truthful', ['truth', 'honest', 'tell them', 'explain']]
+  ]
 };
+
+// Literal route words are a cheap first pass before the classifier. The parser
+// is deliberately simple; ambiguous matches fall back to route buttons.
+export function explicitDirection(text) {
+  const haystack = text.toLowerCase();
+  const patterns = {
+    north: /\bnorth\b|\bgraycap(?: range)?\b|\bnorthern mountain(?:s)?\b/,
+    northwest: /\bnorthwest\b|north[ -]+west|\bgiant.?s pass\b|\bhigh pass\b|\bfrost giant\b/,
+    east: /\beast\b|\bbirchway\b|\brimewood\b|\bsupply road\b|\beastern road\b/,
+    south: /\bsouth\b|\bmammoth grounds?\b|\btundra\b|\bmammoth herd\b/,
+    southwest: /\bsouthwest\b|south[ -]+west|\bdirewolf wood\b|\bdirewolf pack\b/
+  };
+  const found = Object.entries(patterns)
+    .filter(([, pattern]) => pattern.test(haystack))
+    .map(([route]) => route);
+  return found.length === 1
+    ? { route: found[0], ambiguous: false }
+    : { route: null, ambiguous: found.length > 1 };
+}
 
 // Human-readable labels for the manual fallback chips.
 export const LABEL_TEXT = {

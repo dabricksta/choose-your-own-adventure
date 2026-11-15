@@ -1,5 +1,45 @@
 # Changelog
 
+## v0.4 — engine and story split
+
+### Added
+
+- **`src/engine/`**, a story-agnostic medium: the phase/session driver, transcript model, save envelope with legacy
+  migrations, classifier adapters, provider presets, seeded RNG, and pure helpers. It imports no setting.
+- **`src/stories/frostmarch/`**, the first story module: `content.js` (routes, scenes, labels, demo keywords, display
+  text), `state.js` (state shape, validation, v1 migration), `steps.js` (every phase hook and consequence), and
+  `index.js` (the module the engine loads).
+- **`src/stories/README.md`**, the story-module contract: module fields, the `session` API, classified steps, the
+  replayable-`enter` rule, and the steps to add a story.
+- **`tests/engine.html` + `tests/engine.js`**, 5 engine-level tests against `tests/fixture-story.js` — a five-phase
+  story with no Frostmarch imports. They cover text prompts, classified prompts with the manual fallback, choices,
+  stat hiding/showing, the end button, and save/restore.
+- `tests/fixture-story.js`, a deliberately tiny story used only by the engine suite.
+
+### Changed
+
+- `src/ui.js` is now generic: it renders transcript entries, prompts, choices, and `[[label, value], ...]` stat rows
+  supplied by the story. It no longer imports Frostmarch labels or formats Frostmarch stats itself.
+- `src/main.js` is a boot file: it chooses the story, configures labels, builds the classifier from the provider
+  panel, and exposes the same `__frostmarch` debug surface to the smoke suite.
+- The classifier is constructed with `createClassifier({ getConfig, rules })` instead of reading DOM elements
+  directly. Demo keyword rules are story data.
+- The stat bar refreshes automatically on every phase boundary; stories can still refresh it mid-phase.
+- Frostmarch `stats()` hides the bar through the specialty phase, then shows it from departure onward.
+
+### Removed
+
+- `src/content.js`, `src/state.js`, `src/classify.js`, and `src/game.js`. Their code now lives in the engine modules
+  and the Frostmarch story module, with the same behaviour.
+
+### Verified
+
+- All 12 `tests/smoke.html` Frostmarch tests pass unchanged after the extraction.
+- All 5 `tests/engine.html` fixture tests pass.
+- Save/restore, including a saved transcript and draft, works through the generic session driver.
+
+---
+
 ## v0.3 — depth slice
 
 ### Added

@@ -1,20 +1,15 @@
-// Entry point: provider settings, save/replay controls, and boot.
+// Entry point: choose a story, wire the provider panel and save controls, boot.
+//
+// The engine lives in src/engine and knows no setting. This story is one
+// module in src/stories. Point the import below at another story folder with
+// the same exports to run a different world on the same medium.
 
-import { PROVIDER_PRESETS } from './content.js';
-import { readSave, randomSeed } from './state.js';
-import {
-  seedEl,
-  setPersistence,
-  setResumeEnabled,
-  setSaveNote
-} from './ui.js';
-import {
-  begin,
-  restoreProgress,
-  saveProgress,
-  scheduleSave,
-  debugInfo
-} from './game.js';
+import { createClassifier } from './engine/classify.js';
+import { PROVIDER_PRESETS } from './engine/providers.js';
+import { readSave } from './engine/save.js';
+import { createSession } from './engine/session.js';
+import * as ui from './ui.js';
+import story from './stories/frostmarch/index.js';
 
 const providerEl = document.querySelector('#provider');
 const modelEl = document.querySelector('#model');
@@ -47,39 +42,57 @@ providerEl.addEventListener('change', () => {
 });
 applyProviderPreset();
 
-document.querySelector('#save-now').onclick = saveProgress;
+const classifier = createClassifier({
+  getConfig: () => ({
+    provider: providerEl.value,
+    model: modelEl.value,
+    endpoint: endpointEl.value,
+    key: keyEl.value
+  }),
+  rules: story.demoRules
+});
+
+ui.configure({ labelText: story.labelText, fields: story.fieldLabels });
+
+const session = createSession({ story, ui, classifier });
+
+ui.setPersistence({
+  save: () => session.save(),
+  schedule: () => session.scheduleSave()
+});
+ui.setResumeEnabled(!!readSave(story));
+
+document.querySelector('#save-now').onclick = () => session.save();
 
 document.querySelector('#resume-run').onclick = () => {
-  if (!restoreProgress()) {
-    setSaveNote('No saved run is available in this browser.');
+  if (!session.restore()) {
+    ui.setSaveNote('No saved run is available in this browser.');
   }
 };
 
 document.querySelector('#replay-seed').onclick = () => {
-  const requested = seedEl.value.trim();
-  const current = debugInfo().state?.seed;
-  begin(requested || current || randomSeed());
+  const requested = ui.seedEl.value.trim();
+  const current = session.debug().state?.seed;
+  session.begin(requested || current);
 };
 
-document.querySelector('#new-run').onclick = () => begin(randomSeed());
+document.querySelector('#new-run').onclick = () => session.begin();
 
-setPersistence({ save: saveProgress, schedule: scheduleSave });
-setResumeEnabled(!!readSave());
-
-if (!restoreProgress()) {
-  begin(randomSeed());
+if (!session.restore()) {
+  session.begin();
 }
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') saveProgress();
+  if (document.visibilityState === 'hidden') session.save();
 });
-window.addEventListener('pagehide', saveProgress);
+window.addEventListener('pagehide', () => session.save());
 
 // Small debug surface for the browser console and for smoke checks.
 // It exposes no keys and performs no network calls by itself.
 window.__frostmarch = {
-  debug: debugInfo,
-  begin,
-  restoreProgress,
-  saveProgress
+  story: story.id,
+  debug: () => session.debug(),
+  begin: seed => session.begin(seed),
+  restoreProgress: () => session.restore(),
+  saveProgress: () => session.save()
 };

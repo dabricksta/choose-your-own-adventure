@@ -1,60 +1,19 @@
-// Session state, seeded randomness, validation, and save/load.
-// This module is deliberately free of DOM and game-flow code.
+// Frostmarch state shape, validation, and the v1 -> v2 migration.
+// Pure state only: no DOM, no flow.
 
+import { baseState } from '../../engine/save.js';
+import { clamp, hasOwn, stringList, text, toInt } from '../../engine/util.js';
 import {
-  SAVE_KEY,
-  LEGACY_SAVE_KEY,
-  SAVE_VERSION,
-  MAX_LOG_ENTRIES,
-  SPECIALTIES,
+  BEAT_ACTIONS,
+  DIRECTIONS,
   MONSTER_KINDS,
   OUTCOMES,
-  PHASES,
-  LOG_CLASSES,
-  BEAT_ACTIONS,
-  DIRECTIONS
+  SPECIALTIES
 } from './content.js';
 
-const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
-const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-const toInt = (value, fallback) => {
-  const number = Number(value);
-  return Number.isFinite(number) ? Math.trunc(number) : fallback;
-};
-const text = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : '';
-const stringList = (value, limit) => Array.isArray(value)
-  ? value.filter(item => typeof item === 'string').slice(0, limit)
-  : [];
-
-export function seedHash(seed) {
-  let hash = 2166136261;
-  for (const character of String(seed)) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0 || 1;
-}
-
-export function randomSeed() {
-  try {
-    return [...crypto.getRandomValues(new Uint32Array(2))]
-      .map(number => number.toString(36))
-      .join('');
-  } catch {
-    return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-  }
-}
-
-export function nextRandom(state) {
-  state.rngState = (Math.imul(state.rngState, 1664525) + 1013904223) >>> 0;
-  return state.rngState / 4294967296;
-}
-
 export function blankState(seed) {
-  seed = String(seed || randomSeed());
   return {
-    seed,
-    rngState: seedHash(seed),
+    ...baseState(seed),
     gender: '',
     specialtyText: '',
     specialty: 'observant',
@@ -134,10 +93,11 @@ function normalizeEncounter(value) {
 
 export function normalizeState(input) {
   const source = input && typeof input === 'object' ? input : {};
-  const seed = typeof source.seed === 'string' && source.seed ? source.seed.slice(0, 200) : randomSeed();
+  const seed = typeof source.seed === 'string' && source.seed ? source.seed.slice(0, 200) : baseState().seed;
+  const seeded = baseState(seed);
   return {
-    seed,
-    rngState: Number.isFinite(source.rngState) ? source.rngState >>> 0 : seedHash(seed),
+    ...seeded,
+    rngState: Number.isFinite(source.rngState) ? source.rngState >>> 0 : seeded.rngState,
     gender: text(source.gender, 200),
     specialtyText: text(source.specialtyText, 500),
     specialty: SPECIALTIES.includes(source.specialty) ? source.specialty : 'other',
@@ -197,82 +157,4 @@ export function migrateState(legacyState) {
     hideTaken: !!legacy.loot?.hideTaken
   };
   return state;
-}
-
-export function sanitizeLog(entries) {
-  if (!Array.isArray(entries)) return [];
-  const clean = [];
-  for (const entry of entries.slice(-MAX_LOG_ENTRIES)) {
-    if (!entry || typeof entry !== 'object') continue;
-    if (entry.kind === 'hr') {
-      clean.push({ kind: 'hr' });
-      continue;
-    }
-    if (entry.kind === 'say' && typeof entry.text === 'string') {
-      clean.push({
-        kind: 'say',
-        text: entry.text.slice(0, 20000),
-        cls: LOG_CLASSES.has(entry.cls) ? entry.cls : 'scene'
-      });
-    }
-  }
-  return clean;
-}
-
-export function makeSnapshot(state, phase, log, draft) {
-  return {
-    version: SAVE_VERSION,
-    savedAt: Date.now(),
-    state,
-    phase,
-    log: sanitizeLog(log),
-    draft: String(draft || '').slice(0, 5000)
-  };
-}
-
-function readJson(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || 'null');
-  } catch {
-    return null;
-  }
-}
-
-function isRestorable(value) {
-  return !!value
-    && value.version === SAVE_VERSION
-    && value.state
-    && typeof value.state === 'object'
-    && PHASES.has(value.phase)
-    && Array.isArray(value.log);
-}
-
-export function readSave() {
-  const current = readJson(SAVE_KEY);
-  if (isRestorable(current)) {
-    return { ...current, log: sanitizeLog(current.log) };
-  }
-
-  const legacy = readJson(LEGACY_SAVE_KEY);
-  if (legacy && legacy.version === 1 && legacy.state && PHASES.has(legacy.phase)) {
-    return {
-      version: SAVE_VERSION,
-      migratedFrom: 1,
-      state: migrateState(legacy.state),
-      phase: legacy.phase,
-      log: [],
-      draft: typeof legacy.draft === 'string' ? legacy.draft.slice(0, 5000) : ''
-    };
-  }
-
-  return null;
-}
-
-export function writeSave(state, phase, log, draft) {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(makeSnapshot(state, phase, log, draft)));
-    return { ok: true };
-  } catch (error) {
-    return { ok: false, error };
-  }
 }
